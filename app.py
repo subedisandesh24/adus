@@ -99,17 +99,14 @@ def clean_text(txt):
 
 
 # -------------------------------------------------------------------------
-# 2. Dynamic Model Selector (Prevents 404 Errors Forever)
+# 2. Dynamic Model Selector (Updated to gemini-3.6-flash)
 # -------------------------------------------------------------------------
 def get_active_model_name():
     """Finds the best active generative model available on your API key"""
     preferred_models = [
-        "gemini-2.5-flash",
-        "gemini-2.0-flash",
-        "gemini-1.5-flash-latest",
-        "gemini-1.5-flash-002",
-        "gemini-1.5-flash-001",
-        "gemini-1.5-pro",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-3.0-flash",
     ]
     try:
         available = [
@@ -117,19 +114,17 @@ def get_active_model_name():
             for m in genai.list_models()
             if "generateContent" in m.supported_generation_methods
         ]
-        # Match preferred models
-        for model_candidate in preferred_models:
-            if model_candidate in available:
-                return model_candidate
+        for candidate in preferred_models:
+            if candidate in available:
+                return candidate
         
-        # Fallback to any active flash model
         for m in available:
-            if "flash" in m:
+            if "flash" in m and not ("1.5" in m or "2.5" in m):
                 return m
                 
-        return available[0] if available else "gemini-2.0-flash"
+        return "gemini-3.6-flash"
     except Exception:
-        return "gemini-2.0-flash"
+        return "gemini-3.6-flash"
 
 
 # -------------------------------------------------------------------------
@@ -245,7 +240,6 @@ with col_action:
                 try:
                     genai.configure(api_key=api_key)
                     
-                    # Dynamically get the currently active model
                     selected_model = get_active_model_name()
                     
                     model = genai.GenerativeModel(
@@ -305,7 +299,6 @@ with col_action:
                     {CANDIDATE_PROFILE}
                     """
 
-                    # Pass text or image based on user selection
                     if "Paste" in input_mode:
                         full_content = [prompt, f"\n\nVACANCY TEXT PROVIDED:\n{vacancy_text}"]
                     else:
@@ -313,7 +306,6 @@ with col_action:
 
                     response = model.generate_content(full_content)
                     
-                    # Clean JSON response
                     raw_json = response.text.strip()
                     if raw_json.startswith("```json"):
                         raw_json = raw_json[7:]
