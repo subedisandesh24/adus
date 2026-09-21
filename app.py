@@ -99,7 +99,41 @@ def clean_text(txt):
 
 
 # -------------------------------------------------------------------------
-# 2. Sudha Panthi's Verified Profile Data
+# 2. Dynamic Model Selector (Prevents 404 Errors Forever)
+# -------------------------------------------------------------------------
+def get_active_model_name():
+    """Finds the best active generative model available on your API key"""
+    preferred_models = [
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-flash-002",
+        "gemini-1.5-flash-001",
+        "gemini-1.5-pro",
+    ]
+    try:
+        available = [
+            m.name.replace("models/", "")
+            for m in genai.list_models()
+            if "generateContent" in m.supported_generation_methods
+        ]
+        # Match preferred models
+        for model_candidate in preferred_models:
+            if model_candidate in available:
+                return model_candidate
+        
+        # Fallback to any active flash model
+        for m in available:
+            if "flash" in m:
+                return m
+                
+        return available[0] if available else "gemini-2.0-flash"
+    except Exception:
+        return "gemini-2.0-flash"
+
+
+# -------------------------------------------------------------------------
+# 3. Sudha Panthi's Verified Profile Data
 # -------------------------------------------------------------------------
 CANDIDATE_PROFILE = """
 CANDIDATE: SUDHA PANTHI
@@ -159,19 +193,21 @@ SKILLS:
 """
 
 # -------------------------------------------------------------------------
-# 3. Streamlit App Interface & Logic
+# 4. Streamlit App Interface & Logic
 # -------------------------------------------------------------------------
 st.set_page_config(page_title="Sudha Panthi - Vacancy Matcher", layout="wide")
 
 st.title("🌱 NGO/INGO Vacancy Application Matcher")
 st.write("Provide a job vacancy via text or image to generate a tailored Career Objective, Work Experience, and Cover Letter.")
 
-# Retrieve API Key from Streamlit Secrets or sidebar
-api_key = st.secrets.get("GEMINI_API_KEY", None)
+# Retrieve & Sanitize API Key from Streamlit Secrets or Sidebar
+raw_key = st.secrets.get("GEMINI_API_KEY", None)
 
-if not api_key:
-    api_key = st.sidebar.text_input("Gemini API Key:", type="password")
+if not raw_key:
+    raw_key = st.sidebar.text_input("Gemini API Key:", type="password")
     st.sidebar.caption("Provide an API key from Google AI Studio")
+
+api_key = raw_key.strip().strip('"').strip("'") if raw_key else None
 
 # Input selection: Text vs. Image
 input_mode = st.radio(
@@ -205,11 +241,15 @@ with col_action:
         if not api_key:
             st.warning("Please configure 'GEMINI_API_KEY' in Streamlit Secrets or enter your key in the sidebar.")
         else:
-            with st.spinner("Analyzing vacancy details and matching your profile..."):
+            with st.spinner("Connecting to Google AI and matching your profile..."):
                 try:
                     genai.configure(api_key=api_key)
+                    
+                    # Dynamically get the currently active model
+                    selected_model = get_active_model_name()
+                    
                     model = genai.GenerativeModel(
-                        "gemini-1.5-flash", 
+                        selected_model, 
                         generation_config={"response_mime_type": "application/json"}
                     )
 
@@ -333,7 +373,7 @@ with col_action:
                     # -------------------------------------------------
                     # Display Results & Download Options
                     # -------------------------------------------------
-                    st.success(f"Generated for: {data['vacancy_details']['job_title']} at {data['vacancy_details']['organization']}")
+                    st.success(f"Generated using [{selected_model}] for: {data['vacancy_details']['job_title']} at {data['vacancy_details']['organization']}")
 
                     tab_cv, tab_cl = st.tabs(["📄 Tailored CV Section", "✉️ Tailored Cover Letter"])
 
