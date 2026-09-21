@@ -106,7 +106,40 @@ def clean_text(txt):
 
 
 # -------------------------------------------------------------------------
-# 2. Permanent CV Database (Included in every generated CV)
+# 2. Dynamic Model Selector (Prevents Groq 404 Deprecation Errors)
+# -------------------------------------------------------------------------
+def get_groq_active_models(client):
+    """Dynamically queries Groq API for currently active models on your account"""
+    try:
+        available_models = [m.id for m in client.models.list().data]
+        
+        # Priority preferences for text processing
+        preferred_text = [
+            "openai/gpt-oss-120b",
+            "openai/gpt-oss-20b",
+            "qwen/qwen3.8-27b",
+            "llama-3.3-70b-versatile",
+            "llama-3.1-8b-instant"
+        ]
+        text_model = next((m for m in preferred_text if m in available_models), None)
+        if not text_model:
+            text_model = available_models[0] if available_models else "openai/gpt-oss-120b"
+            
+        # Priority preferences for vision/image processing
+        preferred_vision = [
+            "llama-3.2-11b-vision-preview",
+            "llama-3.2-90b-vision-preview",
+            "qwen/qwen3.8-27b"
+        ]
+        vision_model = next((m for m in preferred_vision if m in available_models), text_model)
+        
+        return text_model, vision_model
+    except Exception:
+        return "openai/gpt-oss-120b", "llama-3.2-11b-vision-preview"
+
+
+# -------------------------------------------------------------------------
+# 3. Permanent CV Database (Included in every generated CV)
 # -------------------------------------------------------------------------
 PERMANENT_CV_SECTIONS = {
     "publication": "Impact of Farmers' Marketing Decisions on Profitability in Wheat: A Case Study of Kailali District - American Journal of Applied Statistics and Economics. DOI:10.54536/ajase.v5i2.6848",
@@ -172,18 +205,16 @@ PERMANENT_CV_SECTIONS = {
 }
 
 # -------------------------------------------------------------------------
-# 3. Streamlit Interface & Groq Execution
+# 4. Streamlit User Interface
 # -------------------------------------------------------------------------
 st.set_page_config(page_title="Sudha Panthi - Application Matcher", layout="wide")
 
 st.title("🌱 NGO/INGO Application Generator")
 st.caption("⚡ Powered by Groq (14,400 free requests/day)")
 
-# Retrieve API Key from Secrets or Sidebar
 raw_key = st.secrets.get("GROQ_API_KEY", None)
 if not raw_key:
     raw_key = st.sidebar.text_input("Groq API Key (starts with gsk_):", type="password")
-    st.sidebar.caption("Get a free key from console.groq.com/keys")
 
 api_key = raw_key.strip().strip('"').strip("'") if raw_key else None
 
@@ -218,11 +249,14 @@ with col_btn:
     
     if st.button("Generate Complete Tailored Application", type="primary", disabled=not has_input):
         if not api_key:
-            st.warning("Please provide your Groq API key (starts with gsk_) to proceed.")
+            st.warning("Please provide your Groq API key to proceed.")
         else:
-            with st.spinner("Connecting to Groq and generating your application..."):
+            with st.spinner("Discovering active Groq models & tailoring application..."):
                 try:
                     client = Groq(api_key=api_key)
+                    
+                    # Auto-detect currently active models on Groq
+                    text_model, vision_model = get_groq_active_models(client)
 
                     system_prompt = """
                     You are an expert HR recruitment specialist for national and international NGOs in Nepal.
@@ -284,13 +318,13 @@ with col_btn:
                     """
 
                     if "Paste" in input_mode:
-                        selected_model = "llama-3.3-70b-versatile"
+                        selected_model = text_model
                         messages = [
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": f"VACANCY TEXT:\n{vacancy_text}"}
                         ]
                     else:
-                        selected_model = "llama-3.2-11b-vision-preview"
+                        selected_model = vision_model
                         base64_image = base64.b64encode(uploaded_image_bytes).decode("utf-8")
                         messages = [
                             {"role": "system", "content": system_prompt},
