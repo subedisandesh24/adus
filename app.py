@@ -99,36 +99,7 @@ def clean_text(txt):
 
 
 # -------------------------------------------------------------------------
-# 2. Dynamic Model Selector (Updated to gemini-3.6-flash)
-# -------------------------------------------------------------------------
-def get_active_model_name():
-    """Finds the best active generative model available on your API key"""
-    preferred_models = [
-        "gemini-3.6-flash",
-        "gemini-3.5-flash",
-        "gemini-3.0-flash",
-    ]
-    try:
-        available = [
-            m.name.replace("models/", "")
-            for m in genai.list_models()
-            if "generateContent" in m.supported_generation_methods
-        ]
-        for candidate in preferred_models:
-            if candidate in available:
-                return candidate
-        
-        for m in available:
-            if "flash" in m and not ("1.5" in m or "2.5" in m):
-                return m
-                
-        return "gemini-3.6-flash"
-    except Exception:
-        return "gemini-3.6-flash"
-
-
-# -------------------------------------------------------------------------
-# 3. Sudha Panthi's Verified Profile Data
+# 2. Sudha Panthi's Verified Profile Data
 # -------------------------------------------------------------------------
 CANDIDATE_PROFILE = """
 CANDIDATE: SUDHA PANTHI
@@ -188,7 +159,7 @@ SKILLS:
 """
 
 # -------------------------------------------------------------------------
-# 4. Streamlit App Interface & Logic
+# 3. Streamlit App Interface & Logic
 # -------------------------------------------------------------------------
 st.set_page_config(page_title="Sudha Panthi - Vacancy Matcher", layout="wide")
 
@@ -236,11 +207,12 @@ with col_action:
         if not api_key:
             st.warning("Please configure 'GEMINI_API_KEY' in Streamlit Secrets or enter your key in the sidebar.")
         else:
-            with st.spinner("Connecting to Google AI and matching your profile..."):
+            with st.spinner("Connecting to Google AI (gemini-3.6-flash) and matching your profile..."):
                 try:
                     genai.configure(api_key=api_key)
                     
-                    selected_model = get_active_model_name()
+                    # Explicitly use gemini-3.6-flash as instructed by Google
+                    selected_model = "gemini-3.6-flash"
                     
                     model = genai.GenerativeModel(
                         selected_model, 
@@ -365,7 +337,7 @@ with col_action:
                     # -------------------------------------------------
                     # Display Results & Download Options
                     # -------------------------------------------------
-                    st.success(f"Generated using [{selected_model}] for: {data['vacancy_details']['job_title']} at {data['vacancy_details']['organization']}")
+                    st.success(f"Generated successfully using [{selected_model}] for: {data['vacancy_details']['job_title']} at {data['vacancy_details']['organization']}")
 
                     tab_cv, tab_cl = st.tabs(["📄 Tailored CV Section", "✉️ Tailored Cover Letter"])
 
