@@ -16,10 +16,6 @@ import unicodedata
 # -------------------------------------------------------------------------
 @st.cache_resource
 def setup_calibri_fonts():
-    """
-    Finds native Calibri on Windows or downloads Carlito (Google's metric-identical
-    open-source Calibri twin) for Streamlit Cloud/Linux.
-    """
     win_dir = "C:\\Windows\\Fonts"
     win_reg = os.path.join(win_dir, "calibri.ttf")
     win_bold = os.path.join(win_dir, "calibrib.ttf")
@@ -51,7 +47,6 @@ def setup_calibri_fonts():
 # 2. Clean Text Function (Removes '???' and raw asterisks)
 # -------------------------------------------------------------------------
 def clean_text(val):
-    """Safely converts unicode to clean ASCII, stripping characters that turn into '???' and removes stray asterisks"""
     if val is None:
         return ""
     if isinstance(val, list):
@@ -77,7 +72,7 @@ def clean_text(val):
 
 
 # -------------------------------------------------------------------------
-# 3. PDF Builder (Calibri Typography & Clean Layout)
+# 3. PDF Builder (Calibri + Justified Alignment for Major Works)
 # -------------------------------------------------------------------------
 class CompleteCVPDF(FPDF):
     def __init__(self, doc_type="CV"):
@@ -142,6 +137,7 @@ class CompleteCVPDF(FPDF):
         self.ln(2.5)
 
     def draw_org_block(self, org_name, location, role_title, dates, bullets):
+        """Organization Block with JUSTIFIED alignment for major works"""
         avail_w = self.printable_width
         col_left = 115
         col_right = avail_w - col_left
@@ -160,11 +156,12 @@ class CompleteCVPDF(FPDF):
         self.cell(col_right, 4.2, clean_text(dates), align="R", new_x="LMARGIN", new_y="NEXT")
         self.ln(0.8)
 
+        # Bullets rendered with JUSTIFIED (align="J") alignment
         self.set_font(self.font_family, "", 9)
         self.set_text_color(35, 35, 35)
         for bullet in bullets:
             self.set_x(self.l_margin)
-            self.multi_cell(avail_w, 4.3, f"-  {clean_text(bullet)}", new_x="LMARGIN", new_y="NEXT")
+            self.multi_cell(avail_w, 4.3, f"-  {clean_text(bullet)}", align="J", new_x="LMARGIN", new_y="NEXT")
         self.ln(1.5)
 
     def draw_two_col_entry(self, left_bold, left_sub, right_txt, right_sub=""):
@@ -430,7 +427,6 @@ if st.session_state.scanned_data:
 
                     today_formatted = datetime.today().strftime("%B %d, %Y")
 
-                    # In-depth INGO Recruitment Excellence Prompt
                     full_prompt = f"""
                     You are a senior recruitment director and technical advisor for international and national NGOs in Nepal (UN agencies, USAID, FCDO, EU partners, Save the Children, CARE, Plan International).
                     
@@ -456,44 +452,39 @@ if st.session_state.scanned_data:
                     ========================================================================
                     SECTION A: IN-DEPTH, EVIDENCE-BASED COVER LETTER (~1 TO 1.2 PAGES)
                     ========================================================================
-                    - Tone: Professional, confident, sincere, human, development-oriented, and practical. Avoid generic corporate jargon or exaggerated flattery.
-                    - Evidence-Based: NEVER write self-flattering adjectives like "I am a hardworking, passionate, and highly motivated professional." Instead, SHOW evidence: "Through my work with smallholder farmers, women cooperatives, and research trials, I have managed digital survey tools, facilitated participatory training, and executed field trials."
+                    - Tone: Professional, confident, sincere, human, development-oriented, and practical.
+                    - Evidence-Based: SHOW evidence rather than generic flattery: "Through my work with smallholder farmers, women cooperatives, and research trials, I have managed digital survey tools, facilitated participatory training, and executed field trials."
                     - Natural INGO Terminology: Weave in relevant development terms based on the JD: food security, livelihoods, resilience, inclusion (GESI), value chains, climate adaptation, capacity building, safeguarding, and MEAL.
                     - 5-Paragraph Structure:
-                      * Paragraph 1 (Opening): Exact position, organization, clear professional identity (Agriculture & Livelihoods professional with hands-on field research, community mobilization, and digital data experience), and specific motivation aligned with the project's development outcomes.
-                      * Paragraph 2 (Relevant Experience & Achievements): Concrete responsibilities and evidence from NDRI (aquaculture survey, Kobo Toolbox, multi-stakeholder KIIs/FGDs) and NARC (wheat trials, JTA supervision, agronomic data).
-                      * Paragraph 3 (Community Mobilization & Field Reality): Grassroots mobilization in Tanahu (training 36 farmers on water management, IPM, Jhol Mol), Harihar women cooperative (off-season vegetables), showing ability to work effectively beyond academic settings with farmers, cooperatives, and local government bodies.
-                      * Paragraph 4 (Technical Competence + Development Alignment): Connecting agricultural science + field implementation + digital tools (Kobo Toolbox/GIS/RStudio) to the organization's specific programme goals.
-                      * Paragraph 5 (Closing): Concrete contribution, adherence to safeguarding and humanitarian principles, availability, and formal sign-off.
+                      * Paragraph 1 (Opening): Exact position, organization, professional identity (Agriculture & Livelihoods professional), and motivation.
+                      * Paragraph 2 (Relevant Experience): Concrete evidence from NDRI (aquaculture survey, Kobo Toolbox, multi-stakeholder KIIs/FGDs) and NARC (wheat trials, JTA supervision).
+                      * Paragraph 3 (Community Mobilization): Tanahu organic farming project (36 farmers, water management, IPM, Jhol Mol), Harihar women cooperative (off-season vegetables).
+                      * Paragraph 4 (Technical Competence): Connecting agricultural science + field implementation + digital tools (Kobo Toolbox/GIS/RStudio) to the organization's goals.
+                      * Paragraph 5 (Closing): Contribution, safeguarding, availability, and formal sign-off.
                     - Date Mandate: Start strictly with: "{today_formatted}\\n\\nHiring Committee\\n{org_name}\\n..."
                     - Closing: Formally end with:
                       "Sincerely,\\nSudha Panthi\\nPhone: +977-9860906707\\nEmail: Sudha.panthee@gmail.com\\nLalitpur / Kathmandu, Nepal"
 
                     ========================================================================
-                    SECTION B: INGO-TAILORED CV (MOVING FROM ACADEMIC TO DEVELOPMENT CV)
+                    SECTION B: INGO-TAILORED CV (Calibri, Justified Major Works)
                     ========================================================================
                     1. Professional Identity Tagline:
-                       A strong, scannable headline matching the vacancy, e.g.:
-                       "Agriculture & Livelihoods Professional | Food Security | Value Chains | Climate Resilience | MEAL"
-                    2. Tailored Professional Summary:
-                       3-4 impactful lines answering: Who are you? What sectors do you work in? What stakeholders have you engaged? What development outcomes do you deliver?
-                    3. Core Competencies Matrix:
-                       A scannable list of 8-12 prioritized competencies directly aligned to the JD (e.g., Climate-Resilient Agriculture, Agricultural Value Chains, Smallholder Livelihoods, Community Mobilization & GESI, Training & Facilitation, MEAL & Kobo Toolbox, Stakeholder Coordination, Agronomic Field Research).
+                       e.g. "Agriculture & Livelihoods Professional | Food Security | Value Chains | Climate Resilience | MEAL"
+                    2. Tailored Professional Summary (3-4 lines).
+                    3. Core Competencies Matrix (8-12 prioritized competencies aligned to JD).
                     4. Professional Experience (Action + What + Who/Where + Result):
-                       Provide 4-5 substantive, action-packed bullet points for each of the 4 authentic organizations. Use genuine numbers where available (36 farmers, 70 participants, 75 students, KIIs/FGDs). DO NOT invent new organizations.
+                       Provide 4-5 substantive, action-packed bullet points for each of the 4 authentic organizations with genuine numbers (36 farmers, 70 participants, 75 students, KIIs/FGDs).
 
                     ========================================================================
-                    SECTION C: ADMINISTRATIVE GMAIL APPLICATION MESSAGE
+                    SECTION C: ADMINISTRATIVE GMAIL APPLICATION MESSAGE & ATTACHMENTS
                     ========================================================================
                     - Brief, formal, clear, and administrative email body.
-                    - Clearly state position and source.
-                    - 1-2 sentence suitability statement highlighting B.Sc. Agriculture and relevant field experience.
-                    - Clear checklist of attached documents:
-                      1. Curriculum Vitae (CV)
+                    - State position and source.
+                    - 1-2 sentence statement of suitability.
+                    - ATTACHMENTS LIST: Scan the notice to determine exactly what documents are requested. In standard NGO vacancies, this is strictly:
+                      1. Updated Curriculum Vitae (CV)
                       2. Cover Letter
-                      3. Academic Transcripts and Certificates (B.Sc. Agriculture, IAAS TU)
-                      4. Copy of Nepali Citizenship Certificate (Nagarikta)
-                      5. Relevant Training & Experience Certificates
+                      (Do not list transcripts or citizenship unless the vacancy explicitly asked for them).
 
                     NO ASTERISKS RULE: Do NOT use markdown asterisks (* or **) in any JSON string. Write clean, formal, standard English text.
 
@@ -538,7 +529,8 @@ if st.session_state.scanned_data:
                         ],
                         "cover_letter": "{today_formatted}\\n\\nHiring Committee\\n{org_name}... (5 substantive evidence-based paragraphs, ending with Sudha's contact info)",
                         "email_subject": "Application for {target_role} - Sudha Panthi",
-                        "email_body": "Formal Gmail body text with attached documents checklist and contact details..."
+                        "email_body": "Formal Gmail body text with attachments checklist and contact details...",
+                        "requested_documents": ["Updated CV (PDF)", "Cover Letter (PDF)"]
                     }}
                     """
 
@@ -580,7 +572,7 @@ if st.session_state.scanned_data:
                     avail_w = 210 - 16 - 16
 
                     # ---------------------------------------------------------
-                    # BUILD INGO-STYLE FULL CV PDF (Calibri)
+                    # BUILD INGO-STYLE FULL CV PDF (Calibri + Justified Bullets)
                     # ---------------------------------------------------------
                     cv_pdf = CompleteCVPDF(doc_type="CV")
                     cv_pdf.add_page()
@@ -594,15 +586,15 @@ if st.session_state.scanned_data:
                     cv_pdf.cell(avail_w, 5, tagline, new_x="LMARGIN", new_y="NEXT")
                     cv_pdf.ln(1)
 
-                    # 2. Tailored Professional Summary
+                    # 2. Tailored Professional Summary (Justified)
                     summary_text = clean_text(data.get("cv_professional_summary", ""))
                     cv_pdf.set_x(cv_pdf.l_margin)
                     cv_pdf.set_font(cv_pdf.font_family, "", 9.2)
                     cv_pdf.set_text_color(30, 30, 30)
-                    cv_pdf.multi_cell(avail_w, 4.3, summary_text, new_x="LMARGIN", new_y="NEXT")
+                    cv_pdf.multi_cell(avail_w, 4.3, summary_text, align="J", new_x="LMARGIN", new_y="NEXT")
                     cv_pdf.ln(1.5)
 
-                    # 3. Core Competencies Matrix (Scannable for INGO HR/ATS)
+                    # 3. Core Competencies Matrix
                     cv_pdf.draw_section_heading("Core Competencies")
                     competencies = data.get("cv_core_competencies", [])
                     if isinstance(competencies, list) and competencies:
@@ -620,7 +612,7 @@ if st.session_state.scanned_data:
                                 cv_pdf.ln(4.2)
                         cv_pdf.ln(1)
 
-                    # 4. Professional Experience (Action + What + Where + Result)
+                    # 4. Professional Experience (Justified Bullets via draw_org_block)
                     cv_pdf.draw_section_heading("Professional Experience")
                     for org in data.get("tailored_experience", []):
                         raw_bullets = org.get("bullets", [])
@@ -673,7 +665,7 @@ if st.session_state.scanned_data:
                             cv_pdf.cell(avail_w, 4.0, clean_text(r_title), new_x="LMARGIN", new_y="NEXT")
                             cv_pdf.set_x(cv_pdf.l_margin)
                             cv_pdf.set_font("Helvetica", "", 8.8)
-                            cv_pdf.multi_cell(avail_w, 4.0, f"  {clean_text(r_desc)}", new_x="LMARGIN", new_y="NEXT")
+                            cv_pdf.multi_cell(avail_w, 4.0, f"  {clean_text(r_desc)}", align="J", new_x="LMARGIN", new_y="NEXT")
                         cv_pdf.ln(1)
 
                     # 9. Relevant Trainings and Workshops
@@ -719,7 +711,7 @@ if st.session_state.scanned_data:
                     cv_pdf.output(cv_buf)
                     
                     # ---------------------------------------------------------
-                    # BUILD EVIDENCE-BASED COVER LETTER PDF (1 to 1.2 Pages)
+                    # BUILD EVIDENCE-BASED COVER LETTER PDF (Justified Flow)
                     # ---------------------------------------------------------
                     cl_pdf = CompleteCVPDF(doc_type="Cover Letter")
                     cl_pdf.add_page()
@@ -729,7 +721,7 @@ if st.session_state.scanned_data:
                     cl_pdf.set_x(cl_pdf.l_margin)
                     cl_pdf.set_font(cl_pdf.font_family, "", 9.5)
                     cl_pdf.set_text_color(30, 30, 30)
-                    cl_pdf.multi_cell(avail_w, 4.7, clean_text(data.get("cover_letter", "")), new_x="LMARGIN", new_y="NEXT")
+                    cl_pdf.multi_cell(avail_w, 4.8, clean_text(data.get("cover_letter", "")), align="J", new_x="LMARGIN", new_y="NEXT")
                     
                     cl_buf = io.BytesIO()
                     cl_pdf.output(cl_buf)
@@ -765,13 +757,12 @@ if st.session_state.generated_app_data is not None:
             for idx, comp in enumerate(comps):
                 cols[idx % 3].write(f"✔ {clean_text(comp)}")
 
-        st.markdown("#### Professional Experience")
+        st.markdown("#### Professional Experience (Justified Major Works)")
         for org in data.get("tailored_experience", []):
             with st.expander(f"📍 {clean_text(org.get('organization', ''))} - {clean_text(org.get('role', ''))}", expanded=True):
                 for b in org.get("bullets", []):
                     st.write(f"- {clean_text(b)}")
 
-        # Download button placed at the end of the CV tab
         st.write("")
         st.download_button(
             label="📥 Download CV (PDF)",
@@ -785,7 +776,6 @@ if st.session_state.generated_app_data is not None:
         st.subheader("Cover Letter (Evidence-Based & JD Aligned)")
         st.text_area("Cover Letter Preview:", value=clean_text(data.get("cover_letter", "")), height=460, key="cl_preview_area")
         
-        # Download button placed at the end of the Cover Letter tab
         st.write("")
         st.download_button(
             label="📥 Download Cover Letter (PDF)",
@@ -802,4 +792,14 @@ if st.session_state.generated_app_data is not None:
 
         email_msg = clean_text(data.get("email_body", ""))
         st.text_area("Email Body:", value=email_msg, height=350, key="email_body_area")
-        st.caption("📎 Attach your CV (PDF), Cover Letter (PDF), Transcripts, and Nagarikta before sending.")
+        
+        # Dynamic checklist caption reflecting only what was requested
+        req_docs = data.get("requested_documents", ["Updated CV (PDF)", "Cover Letter (PDF)"])
+        if isinstance(req_docs, str):
+            req_docs = [req_docs]
+        req_docs = [clean_text(d) for d in req_docs if d]
+        if not req_docs:
+            req_docs = ["Updated CV (PDF)", "Cover Letter (PDF)"]
+
+        docs_caption = ", ".join(req_docs)
+        st.caption(f"📎 **Requested Attachments:** {docs_caption}")
