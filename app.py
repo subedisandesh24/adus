@@ -7,7 +7,7 @@ import base64
 import io
 
 # -------------------------------------------------------------------------
-# 1. Robust PDF Builder (Fixed Margin & Bounded Horizontal Space)
+# 1. Robust PDF Builder (Safe Widths & Safe Type Handling)
 # -------------------------------------------------------------------------
 class CompleteCVPDF(FPDF):
     def __init__(self, doc_type="CV"):
@@ -22,7 +22,6 @@ class CompleteCVPDF(FPDF):
 
     def draw_cv_header(self):
         """Header matching Page 1 of Sudha's CV"""
-        avail_w = self.printable_width
         self.set_y(14)
         self.set_x(self.l_margin)
         
@@ -116,17 +115,22 @@ class CompleteCVPDF(FPDF):
         self.cell(avail_w / 2, 8, f"{self.page_no()} | P a g e", align="R")
 
 
-def clean_text(txt):
-    """Sanitizes text to safe ASCII characters"""
-    if not txt:
+def clean_text(val):
+    """Safely sanitizes strings, lists, or numbers to safe ASCII characters"""
+    if val is None:
         return ""
+    if isinstance(val, list):
+        val = ", ".join(str(item) for item in val if item is not None)
+    elif not isinstance(val, str):
+        val = str(val)
+
     replacements = {
         "’": "'", "‘": "'", "“": '"', "”": '"', 
         "–": "-", "—": "-", "…": "...", "•": "-"
     }
     for k, v in replacements.items():
-        txt = txt.replace(k, v)
-    return txt.encode("latin-1", "replace").decode("latin-1")
+        val = val.replace(k, v)
+    return val.encode("latin-1", "replace").decode("latin-1")
 
 
 # -------------------------------------------------------------------------
@@ -368,6 +372,21 @@ with col_btn:
                     raw_json = response.choices[0].message.content.strip()
                     data = json.loads(raw_json)
 
+                    # -------------------------------------------------------------
+                    # DATA NORMALIZATION (Prevents list / type errors)
+                    # -------------------------------------------------------------
+                    if isinstance(data.get("tailored_career_objective"), list):
+                        data["tailored_career_objective"] = " ".join(str(x) for x in data["tailored_career_objective"])
+
+                    if isinstance(data.get("cover_letter"), list):
+                        data["cover_letter"] = "\n\n".join(str(x) for x in data["cover_letter"])
+
+                    skills_dict = data.get("tailored_skills", {})
+                    for sk_key in ["computer", "languages", "targeted_technical_and_soft_skills"]:
+                        if isinstance(skills_dict.get(sk_key), list):
+                            skills_dict[sk_key] = ", ".join(str(x) for x in skills_dict[sk_key])
+                    data["tailored_skills"] = skills_dict
+
                     avail_w = 210 - 16 - 16  # standard printable width
 
                     # -------------------------------------------------------------
@@ -382,19 +401,21 @@ with col_btn:
                     cv_pdf.set_x(cv_pdf.l_margin)
                     cv_pdf.set_font("Helvetica", "", 9)
                     cv_pdf.set_text_color(30, 30, 30)
-                    cv_pdf.multi_cell(avail_w, 4.3, clean_text(data["tailored_career_objective"]), new_x="LMARGIN", new_y="NEXT")
+                    cv_pdf.multi_cell(avail_w, 4.3, clean_text(data.get("tailored_career_objective", "")), new_x="LMARGIN", new_y="NEXT")
                     cv_pdf.ln(1)
 
                     # 2. Experience
                     cv_pdf.draw_section_heading("Experience")
-                    for org in data["tailored_experience"]:
-                        if org.get("bullets"):
+                    for org in data.get("tailored_experience", []):
+                        raw_bullets = org.get("bullets", [])
+                        if raw_bullets:
+                            cleaned_bullets = [clean_text(b) for b in raw_bullets]
                             cv_pdf.draw_org_block(
-                                clean_text(org["organization"]),
-                                clean_text(org["location"]),
-                                clean_text(org["role"]),
-                                clean_text(org["dates"]),
-                                [clean_text(b) for b in org["bullets"]]
+                                clean_text(org.get("organization", "")),
+                                clean_text(org.get("location", "")),
+                                clean_text(org.get("role", "")),
+                                clean_text(org.get("dates", "")),
+                                cleaned_bullets
                             )
 
                     # 3. Publication
@@ -452,8 +473,6 @@ with col_btn:
 
                     # 9. Skills (Safe Inline Flow)
                     cv_pdf.draw_section_heading("Skills")
-                    skills_dict = data.get("tailored_skills", {})
-                    
                     cv_pdf.set_x(cv_pdf.l_margin)
                     cv_pdf.set_font("Helvetica", "B", 8.8)
                     cv_pdf.write(4.2, "Computer: ")
@@ -498,11 +517,15 @@ with col_btn:
                     cl_pdf = CompleteCVPDF(doc_type="Cover Letter")
                     cl_pdf.add_page()
                     cl_pdf.draw_cv_header()
-                    cl_pdf.draw_section_heading(f"Application for {clean_text(data['vacancy_details']['job_title'])}")
+                    
+                    job_title_str = clean_text(data.get("vacancy_details", {}).get("job_title", "Position"))
+                    org_str = clean_text(data.get("vacancy_details", {}).get("organization", "Organization"))
+                    
+                    cl_pdf.draw_section_heading(f"Application for {job_title_str}")
                     cl_pdf.set_x(cl_pdf.l_margin)
                     cl_pdf.set_font("Helvetica", "", 9.5)
                     cl_pdf.set_text_color(30, 30, 30)
-                    cl_pdf.multi_cell(avail_w, 4.8, clean_text(data["cover_letter"]), new_x="LMARGIN", new_y="NEXT")
+                    cl_pdf.multi_cell(avail_w, 4.8, clean_text(data.get("cover_letter", "")), new_x="LMARGIN", new_y="NEXT")
                     
                     cl_buf = io.BytesIO()
                     cl_pdf.output(cl_buf)
@@ -511,7 +534,7 @@ with col_btn:
                     # -------------------------------------------------------------
                     # UI Review & Showcase
                     # -------------------------------------------------------------
-                    st.success(f"Tailored via Groq ({selected_model}) for: {data['vacancy_details']['job_title']} at {data['vacancy_details']['organization']}")
+                    st.success(f"Tailored via Groq ({selected_model}) for: {job_title_str} at {org_str}")
 
                     tab_review, tab_cl, tab_cv_preview = st.tabs([
                         "🔍 Review Work Done (Tailored Sections)", 
@@ -521,36 +544,36 @@ with col_btn:
 
                     with tab_review:
                         st.markdown("### 1. Adapted Career Objective")
-                        st.info(data["tailored_career_objective"])
+                        st.info(clean_text(data.get("tailored_career_objective", "")))
 
                         st.markdown("### 2. Vacancy-Targeted Skills")
                         col_s1, col_s2 = st.columns(2)
                         with col_s1:
-                            st.write(f"**Software / Tools:** {skills_dict.get('computer', '')}")
-                            st.write(f"**Languages:** {skills_dict.get('languages', '')}")
+                            st.write(f"**Software / Tools:** {clean_text(skills_dict.get('computer', ''))}")
+                            st.write(f"**Languages:** {clean_text(skills_dict.get('languages', ''))}")
                         with col_s2:
-                            st.write(f"**Prioritized Competencies:** {skills_dict.get('targeted_technical_and_soft_skills', '')}")
+                            st.write(f"**Prioritized Competencies:** {clean_text(skills_dict.get('targeted_technical_and_soft_skills', ''))}")
 
                         st.markdown("### 3. Tailored Experience Bullets (By Organization)")
-                        for org in data["tailored_experience"]:
-                            with st.expander(f"📍 {org['organization']} — {org['role']}"):
-                                for b in org["bullets"]:
-                                    st.write(f"• {b}")
+                        for org in data.get("tailored_experience", []):
+                            with st.expander(f"📍 {clean_text(org.get('organization', ''))} — {clean_text(org.get('role', ''))}"):
+                                for b in org.get("bullets", []):
+                                    st.write(f"• {clean_text(b)}")
 
                         st.download_button(
                             label="📥 Download Complete Tailored CV (PDF)",
                             data=cv_pdf_data,
-                            file_name=f"Sudha_Panthi_Complete_CV_{data['vacancy_details']['job_title'].replace(' ', '_')}.pdf",
+                            file_name=f"Sudha_Panthi_Complete_CV_{job_title_str.replace(' ', '_')}.pdf",
                             mime="application/pdf"
                         )
 
                     with tab_cl:
                         st.subheader("Formal Cover Letter")
-                        st.text_area("Cover Letter Preview:", value=data["cover_letter"], height=300)
+                        st.text_area("Cover Letter Preview:", value=clean_text(data.get("cover_letter", "")), height=300)
                         st.download_button(
                             label="📥 Download Cover Letter (PDF)",
                             data=cl_pdf_data,
-                            file_name=f"Sudha_Panthi_Cover_Letter_{data['vacancy_details']['job_title'].replace(' ', '_')}.pdf",
+                            file_name=f"Sudha_Panthi_Cover_Letter_{job_title_str.replace(' ', '_')}.pdf",
                             mime="application/pdf"
                         )
 
