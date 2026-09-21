@@ -2,10 +2,12 @@ import streamlit as st
 from groq import Groq
 from PIL import Image
 from fpdf import FPDF
+from datetime import datetime
 import json
 import base64
 import io
 import os
+import re
 import urllib.request
 import unicodedata
 
@@ -18,7 +20,6 @@ def setup_calibri_fonts():
     Finds native Calibri on Windows or downloads Carlito (Google's metric-identical
     open-source Calibri twin) for Streamlit Cloud/Linux.
     """
-    # 1. Check Windows native fonts
     win_dir = "C:\\Windows\\Fonts"
     win_reg = os.path.join(win_dir, "calibri.ttf")
     win_bold = os.path.join(win_dir, "calibrib.ttf")
@@ -26,11 +27,9 @@ def setup_calibri_fonts():
     if os.path.exists(win_reg) and os.path.exists(win_bold) and os.path.exists(win_ital):
         return "Calibri", {"": win_reg, "B": win_bold, "I": win_ital}
 
-    # 2. Check local repo folder for calibri.ttf
     if os.path.exists("calibri.ttf") and os.path.exists("calibrib.ttf") and os.path.exists("calibrii.ttf"):
         return "Calibri", {"": "calibri.ttf", "B": "calibrib.ttf", "I": "calibrii.ttf"}
 
-    # 3. Download metric-compatible Carlito (Calibri equivalent) on Linux / Cloud
     carlito_urls = {
         "": "https://raw.githubusercontent.com/google/fonts/main/ofl/carlito/Carlito-Regular.ttf",
         "B": "https://raw.githubusercontent.com/google/fonts/main/ofl/carlito/Carlito-Bold.ttf",
@@ -45,15 +44,14 @@ def setup_calibri_fonts():
                 urllib.request.urlretrieve(url, dest)
         return "Calibri", local_files
     except Exception:
-        # Fallback to standard PDF sans-serif if offline
         return "Helvetica", None
 
 
 # -------------------------------------------------------------------------
-# 2. Clean Text Function (Preserves Bold/Italic Asterisks & ASCII)
+# 2. Clean Text Function (Removes '???' and raw asterisks)
 # -------------------------------------------------------------------------
 def clean_text(val):
-    """Safely converts unicode to clean ASCII, stripping characters that turn into '???'"""
+    """Safely converts unicode to clean ASCII, stripping characters that turn into '???' and removes stray asterisks"""
     if val is None:
         return ""
     if isinstance(val, list):
@@ -61,10 +59,13 @@ def clean_text(val):
     elif not isinstance(val, str):
         val = str(val)
 
+    # Replace raw markdown asterisks to prevent '*word*' errors
+    val = val.replace("**", "").replace("*", "")
+
     replacements = {
         "’": "'", "‘": "'", "“": '"', "”": '"', "`": "'",
         "–": "-", "—": "-", "―": "-", "…": "...",
-        "•": "-", "▪": "-", "►": "-", "·": "-", "★": "*",
+        "•": "-", "▪": "-", "►": "-", "·": "-", "★": "-",
         "✓": "[x]", "✔": "[x]", "✔️": "[x]",
         "\u00a0": " ", "\u200b": "", "\u2003": " ", "\t": "    "
     }
@@ -76,7 +77,7 @@ def clean_text(val):
 
 
 # -------------------------------------------------------------------------
-# 3. PDF Builder (Calibri Typography + Eye-Catching Bold/Italics)
+# 3. PDF Builder (Calibri Typography & Clean Layout)
 # -------------------------------------------------------------------------
 class CompleteCVPDF(FPDF):
     def __init__(self, doc_type="CV"):
@@ -85,7 +86,6 @@ class CompleteCVPDF(FPDF):
         self.set_margins(16, 14, 16)
         self.set_auto_page_break(auto=True, margin=15)
 
-        # Register Calibri or fallback to Helvetica
         self.font_family, font_paths = setup_calibri_fonts()
         if font_paths:
             for style, path in font_paths.items():
@@ -147,7 +147,7 @@ class CompleteCVPDF(FPDF):
         self.ln(2.5)
 
     def draw_org_block(self, org_name, location, role_title, dates, bullets):
-        """Organization Block with bolded keywords and italic role"""
+        """Organization Block with clean bullets"""
         avail_w = self.printable_width
         col_left = 115
         col_right = avail_w - col_left
@@ -166,12 +166,11 @@ class CompleteCVPDF(FPDF):
         self.cell(col_right, 4.2, clean_text(dates), align="R", new_x="LMARGIN", new_y="NEXT")
         self.ln(0.8)
 
-        # Bullets with Markdown support (Bold/Italic)
         self.set_font(self.font_family, "", 9)
         self.set_text_color(35, 35, 35)
         for bullet in bullets:
             self.set_x(self.l_margin)
-            self.multi_cell(avail_w, 4.3, f"-  {clean_text(bullet)}", markdown=True, new_x="LMARGIN", new_y="NEXT")
+            self.multi_cell(avail_w, 4.3, f"-  {clean_text(bullet)}", new_x="LMARGIN", new_y="NEXT")
         self.ln(1.5)
 
     def draw_two_col_entry(self, left_bold, left_sub, right_txt, right_sub=""):
@@ -302,7 +301,6 @@ PERMANENT_CV_SECTIONS = {
 st.set_page_config(page_title="Sudha Panthi - Application Matcher", layout="wide")
 
 st.title("🌱 NGO/INGO Application Generator")
-st.caption("⚡ Calibri Typography, Eye-Catchy Bold/Italic Styling & Multi-Vacancy Engine")
 
 # Initialize Session State
 if "detected_positions" not in st.session_state:
@@ -321,8 +319,6 @@ if not raw_key:
     raw_key = st.sidebar.text_input("Groq API Key (starts with gsk_):", type="password")
 
 api_key = raw_key.strip().strip('"').strip("'") if raw_key else None
-if api_key and api_key.startswith("gsk_"):
-    st.sidebar.success("⚡ Groq API Key Connected")
 
 input_mode = st.radio(
     "Select Vacancy Input Format:",
@@ -413,44 +409,49 @@ if st.session_state.detected_positions:
         st.success(f"🎯 Target Vacancy: **{selected_role}**")
 
     if st.button(f"🚀 Generate Application for '{selected_role}'", type="primary"):
-        with st.spinner(f"Crafting eye-catchy application in Calibri typography..."):
+        with st.spinner(f"Crafting clean application in Calibri typography..."):
             try:
                 client = Groq(api_key=api_key)
                 text_model, vision_model = get_groq_active_models(client)
+
+                # Real today's date formatted nicely
+                today_formatted = datetime.today().strftime("%B %d, %Y")
 
                 full_prompt = f"""
                 You are an expert HR recruitment specialist for national and international NGOs in Nepal (UN, USAID, FCDO partners, Save the Children, CARE).
                 Candidate: SUDHA PANTHI (Phone: +977-9860906707, Email: Sudha.panthee@gmail.com).
                 Target Position: {selected_role}
+                Today's Exact Date: {today_formatted}
 
-                CRITICAL STYLING & CONTENT INSTRUCTIONS:
-                1. EYE-CATCHING BOLD & ITALIC FORMATTING:
-                   - In the COVER LETTER and CV EXPERIENCE BULLETS, strategically use **bold** (e.g., **MATSYA Project**, **Kobo Toolbox**, **NARC**, **Priority Matrix**, **IPM**, **70 participants**, **36 farmers**) for high-impact keywords, methodologies, tools, and metrics.
-                   - Use *italics* for degrees, project titles, or key developmental values (*Do No Harm*, *GESI*, *Modernising Aquaculture in Nepal*).
-                   - This makes the application visually eye-catching and easy for HR scanners to spot core qualifications.
+                CRITICAL FACTUAL & FORMATTING RULES:
+                1. STRICT DEGREE ACCURACY:
+                   - Sudha's degree is ONLY: Bachelor of Science in Agriculture (B.Sc. Agriculture) and ongoing Master of Science in Agriculture (M.Sc. Agriculture) from IAAS, Tribhuvan University.
+                   - DO NOT state she has a degree in "Rural Development" or any other subject.
+                
+                2. NO ASTERISKS / NO RAW MARKDOWN:
+                   - DO NOT use markdown asterisks (* or **) anywhere in the cover letter or bullets.
+                   - Write in clean, formal, professional English text without any symbols.
 
-                2. MAJOR WORKS UNDER EXPERIENCE (EXPANDED & JD-ALIGNED):
+                3. DATE MANDATE:
+                   - Start the cover letter text with today's real date: {today_formatted}.
+                   - NEVER use placeholders like "[Date]".
+
+                4. MAJOR WORKS UNDER EXPERIENCE:
                    - Provide 4 to 6 detailed, action-packed bullet points per organization.
-                   - Align language to {selected_role} (MEAL, field data collection, local Palika coordination, training facilitation, report writing).
-                   - Strictly ground duties in her authentic organizations:
+                   - Ground duties strictly in her authentic organizations:
                      * Nepal Development Research Institute (MATSYA Project, Feb-May 2025): Fisheries KII/FGDs, Kobo Toolbox real-time survey management, stakeholder qualitative transcription.
                      * National Agriculture Research Centre (NARC Agronomy Division, 2023-2024): Pipeline wheat trials, JTA field guidance, laboratory & agronomic data analysis, technical research reporting.
                      * Global Peace Foundation (June 2023-Feb 2024): Priority matrix/logframe community assessments, Tanahu organic farming/water management/IPM/Jhol Mol implementation, leadership & food security capacity building.
                      * Harihar Women Savings and Loan Cooperatives Limited (April-May 2024): 7-day training on off-season vegetables, crop demonstration, IPM for women farmers.
 
-                3. COMPREHENSIVE, IN-DEPTH COVER LETTER:
-                   - Write a thorough, formal, 4-paragraph cover letter tailored specifically to {selected_role}.
-                   - Header must include Sudha's contact info (+977-9860906707 | Sudha.panthee@gmail.com).
-                   - Paragraph 1: State role, organization, project relevance, and deep motivation.
-                   - Paragraph 2: Highlight technical research, trial designs, and data tools (NARC, NDRI, Kobo Toolbox).
-                   - Paragraph 3: Highlight grassroots mobilization, community training, and local coordination (GPF, Harihar Cooperative).
-                   - Paragraph 4: Reiterate commitment to humanitarian standards, safeguarding, and interview readiness.
-                   - Formally sign off with Sudha Panthi, Phone: +977-9860906707, Email: Sudha.panthee@gmail.com.
+                5. COMPREHENSIVE COVER LETTER:
+                   - 4 detailed, formal paragraphs addressed to Hiring Committee / {selected_role}.
+                   - Include Sudha's contact info (+977-9860906707 | Sudha.panthee@gmail.com).
 
-                4. FORMAL GMAIL APPLICATION EMAIL:
-                   - Subject line and polite Gmail message body listing attached documents: CV (PDF), Cover Letter (PDF), Academic Transcripts, Nagarikta, and Certificates.
+                6. GMAIL APPLICATION EMAIL:
+                   - Subject line and formal Gmail body listing attached documents: CV (PDF), Cover Letter (PDF), Academic Transcripts, and Nagarikta.
 
-                Return valid JSON only matching this structure:
+                Return valid JSON only:
                 {{
                     "vacancy_details": {{
                         "job_title": "{selected_role}",
@@ -458,7 +459,7 @@ if st.session_state.detected_positions:
                     }},
                     "email_subject": "Application for {selected_role} - Sudha Panthi",
                     "email_body": "Formal Gmail body text with attached documents checklist and contact details...",
-                    "tailored_career_objective": "3-5 lines with bold/italic styling tailored to {selected_role}",
+                    "tailored_career_objective": "3-5 lines tailored to {selected_role} without asterisks",
                     "tailored_skills": {{
                         "computer": "Microsoft Office, Adobe Photoshop, Adobe Illustrator, Arc-GIS, RStudio, GenStat, SPSS, Kobo Toolbox",
                         "languages": "Nepali (Native), English (Fluent)",
@@ -470,31 +471,31 @@ if st.session_state.detected_positions:
                             "location": "Sanepa, Lalitpur",
                             "role": "Field Researcher, MATSYA Project (Modernising Aquaculture in Nepal)",
                             "dates": "February-May,2025",
-                            "bullets": ["Bullet with **bold** highlights", "Bullet with **bold** highlights"]
+                            "bullets": ["Detailed clean bullet without asterisks", "Detailed clean bullet"]
                         }},
                         {{
                             "organization": "National Agriculture Research Centre, Government of Nepal (Agronomy Division)",
                             "location": "Khumaltar, Lalitpur",
                             "role": "Research Assistant",
                             "dates": "2023-2024",
-                            "bullets": ["Bullet with **bold** highlights", "Bullet with **bold** highlights"]
+                            "bullets": ["Detailed clean bullet without asterisks", "Detailed clean bullet"]
                         }},
                         {{
                             "organization": "Global Peace Foundation",
                             "location": "Nepal",
                             "role": "Fellowship, Global Peacebuilders Leadership Program",
                             "dates": "June 2023-February 2024",
-                            "bullets": ["Bullet with **bold** highlights", "Bullet with **bold** highlights"]
+                            "bullets": ["Detailed clean bullet without asterisks", "Detailed clean bullet"]
                         }},
                         {{
                             "organization": "Harihar Women Savings and Loan Cooperatives Limited",
                             "location": "Pokhara, Nepal",
                             "role": "Trainer",
                             "dates": "April 29-May 5,2024",
-                            "bullets": ["Bullet with **bold** highlights", "Bullet with **bold** highlights"]
+                            "bullets": ["Detailed clean bullet without asterisks", "Detailed clean bullet"]
                         }}
                     ],
-                    "cover_letter": "Comprehensive 4-paragraph cover letter using **bold** and *italic* highlights, ending with Sudha's phone (+977-9860906707) and email"
+                    "cover_letter": "{today_formatted}\\n\\nHiring Committee... (4 thorough paragraphs without any asterisks, ending with Sudha's phone +977-9860906707 and email)"
                 }}
                 """
 
@@ -526,13 +527,20 @@ if st.session_state.detected_positions:
                 )
                 data = json.loads(resp.choices[0].message.content.strip())
 
-                # Normalize types
+                # Normalize types & ensure date
                 if isinstance(data.get("tailored_career_objective"), list):
                     data["tailored_career_objective"] = " ".join(str(x) for x in data["tailored_career_objective"])
                 if isinstance(data.get("cover_letter"), list):
                     data["cover_letter"] = "\n\n".join(str(x) for x in data["cover_letter"])
                 if isinstance(data.get("email_body"), list):
                     data["email_body"] = "\n\n".join(str(x) for x in data["email_body"])
+
+                # Post-process Cover Letter Date & replace placeholders
+                raw_cl = clean_text(data.get("cover_letter", ""))
+                raw_cl = re.sub(r'\[\s*Date\s*\]', today_formatted, raw_cl, flags=re.IGNORECASE)
+                if not raw_cl.startswith(today_formatted):
+                    raw_cl = f"{today_formatted}\n\n" + raw_cl
+                data["cover_letter"] = raw_cl
 
                 skills_dict = data.get("tailored_skills", {})
                 for k in ["computer", "languages", "targeted_technical_and_soft_skills"]:
@@ -542,7 +550,7 @@ if st.session_state.detected_positions:
                 avail_w = 210 - 16 - 16
 
                 # -------------------------------------------------------------
-                # BUILD FULL CV PDF (Calibri + Eye-Catchy Bold Bullets)
+                # BUILD FULL CV PDF (Calibri)
                 # -------------------------------------------------------------
                 cv_pdf = CompleteCVPDF(doc_type="CV")
                 cv_pdf.add_page()
@@ -553,10 +561,10 @@ if st.session_state.detected_positions:
                 cv_pdf.set_x(cv_pdf.l_margin)
                 cv_pdf.set_font(cv_pdf.font_family, "", 9.2)
                 cv_pdf.set_text_color(30, 30, 30)
-                cv_pdf.multi_cell(avail_w, 4.4, clean_text(data.get("tailored_career_objective", "")), markdown=True, new_x="LMARGIN", new_y="NEXT")
+                cv_pdf.multi_cell(avail_w, 4.4, clean_text(data.get("tailored_career_objective", "")), new_x="LMARGIN", new_y="NEXT")
                 cv_pdf.ln(1)
 
-                # 2. Experience (Rendered with Bold/Italic Markdown)
+                # 2. Experience
                 cv_pdf.draw_section_heading("Experience")
                 for org in data.get("tailored_experience", []):
                     raw_bullets = org.get("bullets", [])
@@ -576,7 +584,6 @@ if st.session_state.detected_positions:
                 cv_pdf.set_text_color(30, 30, 30)
                 cv_pdf.write(4.2, clean_text(PERMANENT_CV_SECTIONS["publication_text"]))
                 
-                # Render Blue DOI Link
                 cv_pdf.set_text_color(0, 80, 200)
                 doi_link = PERMANENT_CV_SECTIONS["publication_doi"]
                 cv_pdf.write(4.2, doi_link, link=doi_link)
@@ -663,7 +670,7 @@ if st.session_state.detected_positions:
                 cv_pdf.output(cv_buf)
                 
                 # -------------------------------------------------------------
-                # BUILD EYE-CATCHING COVER LETTER PDF (Markdown Bold/Italic)
+                # BUILD COMPREHENSIVE COVER LETTER PDF (Clean - No Asterisks)
                 # -------------------------------------------------------------
                 cl_pdf = CompleteCVPDF(doc_type="Cover Letter")
                 cl_pdf.add_page()
@@ -673,7 +680,7 @@ if st.session_state.detected_positions:
                 cl_pdf.set_x(cl_pdf.l_margin)
                 cl_pdf.set_font(cl_pdf.font_family, "", 9.8)
                 cl_pdf.set_text_color(30, 30, 30)
-                cl_pdf.multi_cell(avail_w, 4.8, clean_text(data.get("cover_letter", "")), markdown=True, new_x="LMARGIN", new_y="NEXT")
+                cl_pdf.multi_cell(avail_w, 4.8, clean_text(data.get("cover_letter", "")), new_x="LMARGIN", new_y="NEXT")
                 
                 cl_buf = io.BytesIO()
                 cl_pdf.output(cl_buf)
@@ -688,7 +695,7 @@ if st.session_state.detected_positions:
                 st.error(f"Generation error: {e}")
 
 # -------------------------------------------------------------------------
-# 7. Render Results from Session State (Persists after clicking Download)
+# 7. Render Results from Session State
 # -------------------------------------------------------------------------
 if st.session_state.generated_app_data is not None:
     data = st.session_state.generated_app_data
@@ -697,24 +704,20 @@ if st.session_state.generated_app_data is not None:
     st.markdown("---")
     st.success(f"Application ready for: **{active_role}**")
 
-    tab_cv, tab_cl, tab_email = st.tabs([
-        "📄 Tailored Full CV (Calibri)", 
-        "✉️ Eye-Catchy Cover Letter", 
-        "📧 Email Body (Gmail Template)"
-    ])
+    tab_cv, tab_cl, tab_email = st.tabs(["CV", "Cover Letter", "Email"])
 
     with tab_cv:
-        st.markdown("### Adapted Career Objective")
-        st.markdown(clean_text(data.get("tailored_career_objective", "")))
+        st.markdown("### Career Objective")
+        st.write(clean_text(data.get("tailored_career_objective", "")))
 
-        st.markdown("### Expanded Major Works Under Experience (JD Aligned)")
+        st.markdown("### Experience")
         for org in data.get("tailored_experience", []):
-            with st.expander(f"📍 {clean_text(org.get('organization', ''))} — {clean_text(org.get('role', ''))}", expanded=True):
+            with st.expander(f"📍 {clean_text(org.get('organization', ''))} - {clean_text(org.get('role', ''))}", expanded=True):
                 for b in org.get("bullets", []):
-                    st.markdown(f"• {clean_text(b)}")
+                    st.write(f"- {clean_text(b)}")
 
         st.download_button(
-            label="📥 Download Complete Tailored CV (PDF - Calibri)",
+            label="📥 Download CV (PDF)",
             data=st.session_state.cv_pdf_bytes,
             file_name=f"Sudha_Panthi_CV_{active_role.replace(' ', '_')}.pdf",
             mime="application/pdf",
@@ -722,11 +725,11 @@ if st.session_state.generated_app_data is not None:
         )
 
     with tab_cl:
-        st.subheader("Eye-Catchy Formal Cover Letter")
-        st.markdown(clean_text(data.get("cover_letter", "")))
+        st.subheader("Cover Letter")
+        st.text_area("Cover Letter Preview:", value=clean_text(data.get("cover_letter", "")), height=400, key="cl_preview_area")
         
         st.download_button(
-            label="📥 Download Cover Letter (PDF - Calibri)",
+            label="📥 Download Cover Letter (PDF)",
             data=st.session_state.cl_pdf_bytes,
             file_name=f"Sudha_Panthi_Cover_Letter_{active_role.replace(' ', '_')}.pdf",
             mime="application/pdf",
@@ -734,12 +737,10 @@ if st.session_state.generated_app_data is not None:
         )
 
     with tab_email:
-        st.subheader("Formal Gmail Message (Copy & Send)")
-        st.write("Use this exact subject line and body when submitting your application via email:")
-
+        st.subheader("Email Template")
         email_sub = clean_text(data.get("email_subject", f"Application for {active_role} - Sudha Panthi"))
         st.text_input("Subject Line:", value=email_sub, key="email_sub_input")
 
         email_msg = clean_text(data.get("email_body", ""))
         st.text_area("Email Body:", value=email_msg, height=350, key="email_body_area")
-        st.caption("📎 Make sure to attach: CV (PDF), Cover Letter (PDF), Transcripts, and Nagarikta before sending.")
+        st.caption("Attach your CV (PDF), Cover Letter (PDF), Transcripts, and Nagarikta before sending.")
