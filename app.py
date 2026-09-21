@@ -1,5 +1,5 @@
 import streamlit as st
-from groq import Groq
+from openai import OpenAI
 from PIL import Image
 from fpdf import FPDF
 import json
@@ -7,7 +7,7 @@ import base64
 import io
 
 # -------------------------------------------------------------------------
-# 1. Custom PDF Builder (Replicating Sudha's Exact CV Layout)
+# 1. Styled PDF Builder (Replicating Sudha's Exact 3-Page CV Layout)
 # -------------------------------------------------------------------------
 class CompleteCVPDF(FPDF):
     def __init__(self, doc_type="CV"):
@@ -84,7 +84,7 @@ class CompleteCVPDF(FPDF):
         self.ln(1)
 
     def footer(self):
-        """Page Footer"""
+        """Page Footer: Sudha Panthi - Email: ... | X | P a g e"""
         self.set_y(-12)
         self.set_font("Helvetica", "", 8.5)
         self.set_text_color(90, 90, 90)
@@ -172,20 +172,27 @@ PERMANENT_CV_SECTIONS = {
 }
 
 # -------------------------------------------------------------------------
-# 3. Streamlit Interface & Groq Execution
+# 3. Streamlit Interface & Grok / Groq Execution
 # -------------------------------------------------------------------------
-st.set_page_config(page_title="Sudha Panthi - Application Matcher (Groq)", layout="wide")
+st.set_page_config(page_title="Sudha Panthi - Application Matcher", layout="wide")
 
-st.title("🌱 NGO/INGO Application Generator (Powered by Groq)")
-st.caption("⚡ Ultra-fast generation with high free tier allowances.")
+st.title("🌱 NGO/INGO Application Generator")
+st.caption("⚡ Powered by Grok (xAI) / Groq")
 
-# Get Groq API Key
-raw_key = st.secrets.get("GROQ_API_KEY", None)
+# Retrieve API Key from Secrets or Sidebar
+raw_key = st.secrets.get("XAI_API_KEY", None) or st.secrets.get("GROQ_API_KEY", None)
 if not raw_key:
-    raw_key = st.sidebar.text_input("Groq API Key (starts with gsk_):", type="password")
-    st.sidebar.caption("Get your key at [console.groq.com/keys](https://console.groq.com/keys)")
+    raw_key = st.sidebar.text_input("Enter API Key (xai-... or gsk_...):", type="password")
 
 api_key = raw_key.strip().strip('"').strip("'") if raw_key else None
+
+if api_key:
+    if api_key.startswith("xai-"):
+        st.sidebar.success("🚀 xAI (Grok) Key Detected")
+    elif api_key.startswith("gsk_"):
+        st.sidebar.success("⚡ Groq Key Detected")
+    else:
+        st.sidebar.info("🔑 Custom API Key Detected")
 
 input_mode = st.radio(
     "Select Vacancy Input Format:",
@@ -215,11 +222,19 @@ with col_btn:
     
     if st.button("Generate Complete Tailored Application", type="primary", disabled=not has_input):
         if not api_key:
-            st.warning("Please configure 'GROQ_API_KEY' in Streamlit Secrets or sidebar.")
+            st.warning("Please provide your API key to proceed.")
         else:
-            with st.spinner("Processing application via Groq (high speed)..."):
+            with st.spinner("Connecting to Grok and tailoring your application..."):
                 try:
-                    client = Groq(api_key=api_key)
+                    # Configure endpoint & model based on key type
+                    if api_key.startswith("xai-"):
+                        client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
+                        text_model = "grok-beta"
+                        vision_model = "grok-2-vision-1212"
+                    else:
+                        client = OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")
+                        text_model = "llama-3.3-70b-versatile"
+                        vision_model = "llama-3.2-11b-vision-preview"
 
                     system_prompt = """
                     You are an expert HR recruitment specialist for NGOs/INGOs in Nepal.
@@ -280,16 +295,14 @@ with col_btn:
                     }
                     """
 
-                    # If text: use Llama 3.3 70B (Fast & High Intelligence)
-                    # If image: use Llama 3.2 11B Vision
                     if "Paste" in input_mode:
-                        model_name = "llama-3.3-70b-versatile"
+                        selected_model = text_model
                         messages = [
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": f"VACANCY TEXT:\n{vacancy_text}"}
                         ]
                     else:
-                        model_name = "llama-3.2-11b-vision-preview"
+                        selected_model = vision_model
                         base64_image = base64.b64encode(uploaded_image_bytes).decode("utf-8")
                         messages = [
                             {"role": "system", "content": system_prompt},
@@ -303,7 +316,7 @@ with col_btn:
                         ]
 
                     response = client.chat.completions.create(
-                        model=model_name,
+                        model=selected_model,
                         messages=messages,
                         response_format={"type": "json_object"},
                         temperature=0.2
@@ -437,7 +450,7 @@ with col_btn:
                     # -------------------------------------------------------------
                     # UI Review & Showcase
                     # -------------------------------------------------------------
-                    st.success(f"Tailored via Groq ({model_name}) for: {data['vacancy_details']['job_title']} at {data['vacancy_details']['organization']}")
+                    st.success(f"Tailored via {selected_model} for: {data['vacancy_details']['job_title']} at {data['vacancy_details']['organization']}")
 
                     tab_review, tab_cl, tab_cv_preview = st.tabs([
                         "🔍 Review Work Done (Tailored Sections)", 
