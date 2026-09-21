@@ -1,5 +1,5 @@
 import streamlit as st
-from openai import OpenAI
+from groq import Groq
 from PIL import Image
 from fpdf import FPDF
 import json
@@ -93,7 +93,7 @@ class CompleteCVPDF(FPDF):
 
 
 def clean_text(txt):
-    """Sanitizes unicode to Latin-1 compatible characters"""
+    """Sanitizes unicode to Latin-1 compatible characters for standard PDF fonts"""
     if not txt:
         return ""
     replacements = {
@@ -172,27 +172,23 @@ PERMANENT_CV_SECTIONS = {
 }
 
 # -------------------------------------------------------------------------
-# 3. Streamlit Interface & Grok / Groq Execution
+# 3. Streamlit Interface & Groq Execution
 # -------------------------------------------------------------------------
 st.set_page_config(page_title="Sudha Panthi - Application Matcher", layout="wide")
 
 st.title("🌱 NGO/INGO Application Generator")
-st.caption("⚡ Powered by Grok (xAI) / Groq")
+st.caption("⚡ Powered by Groq (14,400 free requests/day)")
 
 # Retrieve API Key from Secrets or Sidebar
-raw_key = st.secrets.get("XAI_API_KEY", None) or st.secrets.get("GROQ_API_KEY", None)
+raw_key = st.secrets.get("GROQ_API_KEY", None)
 if not raw_key:
-    raw_key = st.sidebar.text_input("Enter API Key (xai-... or gsk_...):", type="password")
+    raw_key = st.sidebar.text_input("Groq API Key (starts with gsk_):", type="password")
+    st.sidebar.caption("Get a free key from console.groq.com/keys")
 
 api_key = raw_key.strip().strip('"').strip("'") if raw_key else None
 
-if api_key:
-    if api_key.startswith("xai-"):
-        st.sidebar.success("🚀 xAI (Grok) Key Detected")
-    elif api_key.startswith("gsk_"):
-        st.sidebar.success("⚡ Groq Key Detected")
-    else:
-        st.sidebar.info("🔑 Custom API Key Detected")
+if api_key and api_key.startswith("gsk_"):
+    st.sidebar.success("⚡ Groq API Key Connected")
 
 input_mode = st.radio(
     "Select Vacancy Input Format:",
@@ -222,22 +218,14 @@ with col_btn:
     
     if st.button("Generate Complete Tailored Application", type="primary", disabled=not has_input):
         if not api_key:
-            st.warning("Please provide your API key to proceed.")
+            st.warning("Please provide your Groq API key (starts with gsk_) to proceed.")
         else:
-            with st.spinner("Connecting to Grok and tailoring your application..."):
+            with st.spinner("Connecting to Groq and generating your application..."):
                 try:
-                    # Configure endpoint & model based on key type
-                    if api_key.startswith("xai-"):
-                        client = OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
-                        text_model = "grok-beta"
-                        vision_model = "grok-2-vision-1212"
-                    else:
-                        client = OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")
-                        text_model = "llama-3.3-70b-versatile"
-                        vision_model = "llama-3.2-11b-vision-preview"
+                    client = Groq(api_key=api_key)
 
                     system_prompt = """
-                    You are an expert HR recruitment specialist for NGOs/INGOs in Nepal.
+                    You are an expert HR recruitment specialist for national and international NGOs in Nepal.
                     Tailor Sudha Panthi's application documents based on the provided vacancy.
 
                     CRITICAL CONSTRAINTS:
@@ -291,18 +279,18 @@ with col_btn:
                                 "bullets": ["string"]
                             }
                         ],
-                        "cover_letter": "Complete professional 1-page cover letter formally addressed"
+                        "cover_letter": "Complete professional 1-page cover letter formally addressed to the hiring committee"
                     }
                     """
 
                     if "Paste" in input_mode:
-                        selected_model = text_model
+                        selected_model = "llama-3.3-70b-versatile"
                         messages = [
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": f"VACANCY TEXT:\n{vacancy_text}"}
                         ]
                     else:
-                        selected_model = vision_model
+                        selected_model = "llama-3.2-11b-vision-preview"
                         base64_image = base64.b64encode(uploaded_image_bytes).decode("utf-8")
                         messages = [
                             {"role": "system", "content": system_prompt},
@@ -450,7 +438,7 @@ with col_btn:
                     # -------------------------------------------------------------
                     # UI Review & Showcase
                     # -------------------------------------------------------------
-                    st.success(f"Tailored via {selected_model} for: {data['vacancy_details']['job_title']} at {data['vacancy_details']['organization']}")
+                    st.success(f"Tailored via Groq ({selected_model}) for: {data['vacancy_details']['job_title']} at {data['vacancy_details']['organization']}")
 
                     tab_review, tab_cl, tab_cv_preview = st.tabs([
                         "🔍 Review Work Done (Tailored Sections)", 
