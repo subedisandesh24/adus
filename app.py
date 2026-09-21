@@ -29,7 +29,6 @@ def clean_text(val):
     for k, v in replacements.items():
         val = val.replace(k, v)
 
-    # Convert characters to closest ASCII and DROP unsupported symbols instead of replacing with '?'
     val = unicodedata.normalize('NFKD', val).encode('ascii', 'ignore').decode('ascii')
     return val.strip()
 
@@ -64,7 +63,7 @@ class CompleteCVPDF(FPDF):
         self.ln(3)
 
     def draw_section_heading(self, title):
-        """Heading with horizontal line"""
+        """Heading with horizontal divider line"""
         avail_w = self.printable_width
         self.ln(2)
         self.set_x(self.l_margin)
@@ -79,7 +78,7 @@ class CompleteCVPDF(FPDF):
         self.ln(2.5)
 
     def draw_org_block(self, org_name, location, role_title, dates, bullets):
-        """Organization Block"""
+        """Organization Block with rich, structured bullet points"""
         avail_w = self.printable_width
         col_left = 115
         col_right = avail_w - col_left
@@ -161,10 +160,10 @@ def get_groq_active_models(client):
 
 
 # -------------------------------------------------------------------------
-# 4. Permanent CV Database (Included in every generated CV)
+# 4. Permanent CV Database (With Requested Exact DOI Link)
 # -------------------------------------------------------------------------
 PERMANENT_CV_SECTIONS = {
-    "publication": "Impact of Farmers' Marketing Decisions on Profitability in Wheat: A Case Study of Kailali District - American Journal of Applied Statistics and Economics. DOI:10.54536/ajase.v5i2.6848",
+    "publication": "Impact of Farmers' Marketing Decisions on Profitability in Wheat: A Case Study of Kailali District - American Journal of Applied Statistics and Economics. https://doi.org/10.54536/ajase.v5i2.6848",
     "projects": [
         "Impact of Sowing Date and Seed Rate in Wheat Yield Performance",
         "Case Study on Agribusiness management and financing of a firm",
@@ -227,20 +226,24 @@ PERMANENT_CV_SECTIONS = {
 }
 
 # -------------------------------------------------------------------------
-# 5. Streamlit User Interface & Multi-Vacancy Detection
+# 5. Streamlit App & State Management (Persistent Across Downloads)
 # -------------------------------------------------------------------------
 st.set_page_config(page_title="Sudha Panthi - Application Matcher", layout="wide")
 
 st.title("🌱 NGO/INGO Application Generator")
-st.caption("⚡ Powered by Groq - Zero '???' errors & auto-vacancy selection")
+st.caption("⚡ In-depth JD Experience Matching & Persistent Downloads")
 
-# Session state initialization
+# Initialize Session State
 if "detected_positions" not in st.session_state:
     st.session_state.detected_positions = []
-if "confirmed_position" not in st.session_state:
-    st.session_state.confirmed_position = ""
-if "vacancy_content_cache" not in st.session_state:
-    st.session_state.vacancy_content_cache = None
+if "generated_app_data" not in st.session_state:
+    st.session_state.generated_app_data = None
+if "cv_pdf_bytes" not in st.session_state:
+    st.session_state.cv_pdf_bytes = None
+if "cl_pdf_bytes" not in st.session_state:
+    st.session_state.cl_pdf_bytes = None
+if "active_role_title" not in st.session_state:
+    st.session_state.active_role_title = ""
 
 raw_key = st.secrets.get("GROQ_API_KEY", None)
 if not raw_key:
@@ -262,7 +265,7 @@ uploaded_image_bytes = None
 if "Paste" in input_mode:
     vacancy_text = st.text_area(
         "Paste Job Vacancy / TOR text here:",
-        placeholder="Paste full job notice, multiple vacancies, or requirements here...",
+        placeholder="Paste full job description, TOR, requirements, and responsibilities here...",
         height=260
     )
 else:
@@ -271,21 +274,21 @@ else:
         uploaded_image_bytes = up_file.getvalue()
         st.image(uploaded_image_bytes, caption="Uploaded Notice", use_container_width=True)
 
-# Step 1: Detect available positions
 has_input = (bool(vacancy_text.strip()) if "Paste" in input_mode else uploaded_image_bytes is not None)
 
+# Step 1: Scan for positions
 if has_input and api_key:
-    col_scan, col_status = st.columns([1, 2])
+    col_scan, _ = st.columns([1, 2])
     with col_scan:
         if st.button("🔍 Step 1: Scan Notice & Detect Positions", type="secondary"):
-            with st.spinner("Scanning for positions in vacancy..."):
+            with st.spinner("Scanning positions in vacancy announcement..."):
                 try:
                     client = Groq(api_key=api_key)
                     text_model, vision_model = get_groq_active_models(client)
 
                     scan_prompt = """
-                    Scan this job advertisement and list all individual job vacancies/positions available.
-                    Return a JSON object matching this structure:
+                    Scan this job announcement and list all individual job vacancies/positions available.
+                    Return a JSON object:
                     {
                         "organization": "Organization Name",
                         "positions": ["Job Title 1", "Job Title 2"]
@@ -325,7 +328,7 @@ if has_input and api_key:
                 except Exception as e:
                     st.error(f"Scan error: {e}")
 
-# Step 2: Handle single or multiple positions
+# Step 2: Role selection and full generation
 if st.session_state.detected_positions:
     st.markdown("---")
     if len(st.session_state.detected_positions) > 1:
@@ -338,29 +341,41 @@ if st.session_state.detected_positions:
         selected_role = st.session_state.detected_positions[0]
         st.success(f"🎯 Target Vacancy: **{selected_role}**")
 
-    # Step 3: Generate Application
     if st.button(f"🚀 Generate Application for '{selected_role}'", type="primary"):
-        with st.spinner(f"Tailoring CV and Cover Letter for {selected_role}..."):
+        with st.spinner(f"Crafting in-depth JD experience bullets and comprehensive cover letter..."):
             try:
                 client = Groq(api_key=api_key)
                 text_model, vision_model = get_groq_active_models(client)
 
                 full_prompt = f"""
-                You are an expert HR recruitment specialist for NGOs/INGOs in Nepal.
-                Candidate is SUDHA PANTHI (Phone: +977-9860906707, Email: Sudha.panthee@gmail.com).
+                You are an expert HR recruitment specialist for national and international NGOs in Nepal (UN, USAID, FCDO partners, Save the Children, CARE).
+                Candidate: SUDHA PANTHI (Phone: +977-9860906707, Email: Sudha.panthee@gmail.com).
                 Target Position: {selected_role}
 
-                CRITICAL REQUIREMENTS:
-                1. Tailor all documents specifically for the selected role: '{selected_role}'.
-                2. Do NOT use fancy quotes or rare unicode symbols. Use simple ASCII characters.
-                3. The cover letter MUST explicitly include Sudha's phone number (+977-9860906707) in the opening and closing.
-                4. Authentic organization bullets MUST strictly stay with:
-                   - Nepal Development Research Institute (Feb-May 2025)
-                   - National Agriculture Research Centre (2023-2024)
-                   - Global Peace Foundation (June 2023-Feb 2024)
-                   - Harihar Women Savings and Loan Cooperatives Limited (April-May 2024)
+                CRITICAL ENHANCEMENT INSTRUCTIONS:
+                1. MAJOR WORKS UNDER EXPERIENCE (EXPANDED & JD-ALIGNED):
+                   - For each organization, provide 4 to 6 comprehensive, detailed, action-packed bullet points.
+                   - Explicitly align the technical language of her actual duties to the specific responsibilities of the JD ({selected_role}).
+                   - Reflect standard NGO/INGO operational structures: field-level MEAL, donor compliance, Kobo Toolbox data collection, community mobilization, GESI, local Palika/government coordination, and agricultural sustainability.
+                   - STRICT RULE: Keep tasks strictly within her authentic organizations:
+                     * Nepal Development Research Institute (MATSYA Project, Feb-May 2025): Fisheries KII/FGDs, Kobo Toolbox data management, stakeholder transcription, field surveys.
+                     * National Agriculture Research Centre (NARC Agronomy Division, 2023-2024): Pipeline wheat trials, JTA supervision, laboratory & agronomic data analysis, technical progress reporting.
+                     * Global Peace Foundation (June 2023-Feb 2024): Priority matrix/logframe community assessments, Tanahu organic farming/IPM/Jhol Mol project implementation, leadership & food security capacity building.
+                     * Harihar Women Savings and Loan Cooperatives Limited (April-May 2024): 7-day training on off-season vegetables, crop demonstration, IPM for women farmers.
 
-                Return valid JSON only:
+                2. COMPREHENSIVE, LONG COVER LETTER:
+                   - Write a thorough, formal, and persuasive 4-paragraph cover letter tailored specifically to {selected_role}.
+                   - Header must include Sudha's contact info (+977-9860906707 | Sudha.panthee@gmail.com).
+                   - Paragraph 1: Express strong motivation, citing the position, organization, and project thematic relevance.
+                   - Paragraph 2: Highlight field research, technical trials, and data systems (connecting NARC trials, NDRI MATSYA survey, and Kobo Toolbox to the JD).
+                   - Paragraph 3: Highlight grassroots mobilization, training delivery, stakeholder coordination (GPF Tanahu organic farming project, Harihar women cooperative, local government coordination).
+                   - Paragraph 4: Emphasize work ethic, adherence to humanitarian principles/safeguarding, and express enthusiasm for an interview.
+                   - Sign off formally with Sudha Panthi, Phone: +977-9860906707, Email: Sudha.panthee@gmail.com.
+
+                3. ASCII COMPLIANCE:
+                   - Use standard ASCII characters only. No fancy unicode quotes or symbols.
+
+                Return valid JSON only matching this structure:
                 {{
                     "vacancy_details": {{
                         "job_title": "{selected_role}",
@@ -370,7 +385,7 @@ if st.session_state.detected_positions:
                     "tailored_skills": {{
                         "computer": "Microsoft Office, Adobe Photoshop, Adobe Illustrator, Arc-GIS, RStudio, GenStat, SPSS, Kobo Toolbox",
                         "languages": "Nepali (Native), English (Fluent)",
-                        "targeted_technical_and_soft_skills": "5-8 prioritized competencies"
+                        "targeted_technical_and_soft_skills": "6-8 prioritized competencies"
                     }},
                     "tailored_experience": [
                         {{
@@ -378,31 +393,31 @@ if st.session_state.detected_positions:
                             "location": "Sanepa, Lalitpur",
                             "role": "Field Researcher, MATSYA Project (Modernising Aquaculture in Nepal)",
                             "dates": "February-May,2025",
-                            "bullets": ["string"]
+                            "bullets": ["Detailed bullet 1", "Detailed bullet 2", "Detailed bullet 3", "Detailed bullet 4"]
                         }},
                         {{
                             "organization": "National Agriculture Research Centre, Government of Nepal (Agronomy Division)",
                             "location": "Khumaltar, Lalitpur",
                             "role": "Research Assistant",
                             "dates": "2023-2024",
-                            "bullets": ["string"]
+                            "bullets": ["Detailed bullet 1", "Detailed bullet 2", "Detailed bullet 3", "Detailed bullet 4"]
                         }},
                         {{
                             "organization": "Global Peace Foundation",
                             "location": "Nepal",
                             "role": "Fellowship, Global Peacebuilders Leadership Program",
                             "dates": "June 2023-February 2024",
-                            "bullets": ["string"]
+                            "bullets": ["Detailed bullet 1", "Detailed bullet 2", "Detailed bullet 3", "Detailed bullet 4"]
                         }},
                         {{
                             "organization": "Harihar Women Savings and Loan Cooperatives Limited",
                             "location": "Pokhara, Nepal",
                             "role": "Trainer",
                             "dates": "April 29-May 5,2024",
-                            "bullets": ["string"]
+                            "bullets": ["Detailed bullet 1", "Detailed bullet 2", "Detailed bullet 3"]
                         }}
                     ],
-                    "cover_letter": "Complete professional 1-page cover letter. Include Sudha's contact info (+977-9860906707) and end formally."
+                    "cover_letter": "Comprehensive 4-paragraph formal cover letter with Sudha's phone (+977-9860906707) and email"
                 }}
                 """
 
@@ -434,7 +449,7 @@ if st.session_state.detected_positions:
                 )
                 data = json.loads(resp.choices[0].message.content.strip())
 
-                # Normalize fields
+                # Normalize types
                 if isinstance(data.get("tailored_career_objective"), list):
                     data["tailored_career_objective"] = " ".join(str(x) for x in data["tailored_career_objective"])
                 if isinstance(data.get("cover_letter"), list):
@@ -475,7 +490,7 @@ if st.session_state.detected_positions:
                             [clean_text(b) for b in raw_bullets]
                         )
 
-                # 3. Publication
+                # 3. Publication (With requested exact DOI link)
                 cv_pdf.draw_section_heading("Publication")
                 cv_pdf.set_x(cv_pdf.l_margin)
                 cv_pdf.set_font("Helvetica", "", 8.8)
@@ -560,10 +575,9 @@ if st.session_state.detected_positions:
 
                 cv_buf = io.BytesIO()
                 cv_pdf.output(cv_buf)
-                cv_pdf_data = cv_buf.getvalue()
-
+                
                 # -------------------------------------------------------------
-                # BUILD COVER LETTER PDF (Includes Phone Number)
+                # BUILD COMPREHENSIVE COVER LETTER PDF
                 # -------------------------------------------------------------
                 cl_pdf = CompleteCVPDF(doc_type="Cover Letter")
                 cl_pdf.add_page()
@@ -577,41 +591,54 @@ if st.session_state.detected_positions:
                 
                 cl_buf = io.BytesIO()
                 cl_pdf.output(cl_buf)
-                cl_pdf_data = cl_buf.getvalue()
 
-                # -------------------------------------------------------------
-                # UI Results
-                # -------------------------------------------------------------
-                st.success(f"Tailored application generated for '{selected_role}'!")
-
-                tab_rev, tab_cl = st.tabs(["📄 Tailored CV", "✉️ Cover Letter (with Phone Number)"])
-
-                with tab_rev:
-                    st.markdown("### Adapted Career Objective")
-                    st.info(clean_text(data.get("tailored_career_objective", "")))
-
-                    st.markdown("### Targeted Work Experience (By Organization)")
-                    for org in data.get("tailored_experience", []):
-                        with st.expander(f"📍 {clean_text(org.get('organization', ''))} — {clean_text(org.get('role', ''))}"):
-                            for b in org.get("bullets", []):
-                                st.write(f"• {clean_text(b)}")
-
-                    st.download_button(
-                        label="📥 Download Complete Tailored CV (PDF)",
-                        data=cv_pdf_data,
-                        file_name=f"Sudha_Panthi_CV_{selected_role.replace(' ', '_')}.pdf",
-                        mime="application/pdf"
-                    )
-
-                with tab_cl:
-                    st.subheader("Formal Cover Letter")
-                    st.text_area("Cover Letter Preview:", value=clean_text(data.get("cover_letter", "")), height=320)
-                    st.download_button(
-                        label="📥 Download Cover Letter (PDF)",
-                        data=cl_pdf_data,
-                        file_name=f"Sudha_Panthi_Cover_Letter_{selected_role.replace(' ', '_')}.pdf",
-                        mime="application/pdf"
-                    )
+                # Store into Streamlit Session State (Prevents page wipe upon downloading)
+                st.session_state.generated_app_data = data
+                st.session_state.cv_pdf_bytes = cv_buf.getvalue()
+                st.session_state.cl_pdf_bytes = cl_buf.getvalue()
+                st.session_state.active_role_title = selected_role
 
             except Exception as e:
                 st.error(f"Generation error: {e}")
+
+# -------------------------------------------------------------------------
+# 6. Render Results from Session State (Persists after clicking Download)
+# -------------------------------------------------------------------------
+if st.session_state.generated_app_data is not None:
+    data = st.session_state.generated_app_data
+    active_role = st.session_state.active_role_title
+
+    st.markdown("---")
+    st.success(f"Application ready for: **{active_role}**")
+
+    tab_cv, tab_cl = st.tabs(["📄 Tailored Full CV", "✉️ Comprehensive Cover Letter"])
+
+    with tab_cv:
+        st.markdown("### Adapted Career Objective")
+        st.info(clean_text(data.get("tailored_career_objective", "")))
+
+        st.markdown("### Expanded Major Works Under Experience (JD Aligned)")
+        for org in data.get("tailored_experience", []):
+            with st.expander(f"📍 {clean_text(org.get('organization', ''))} — {clean_text(org.get('role', ''))}", expanded=True):
+                for b in org.get("bullets", []):
+                    st.write(f"• {clean_text(b)}")
+
+        st.download_button(
+            label="📥 Download Complete Tailored CV (PDF)",
+            data=st.session_state.cv_pdf_bytes,
+            file_name=f"Sudha_Panthi_CV_{active_role.replace(' ', '_')}.pdf",
+            mime="application/pdf",
+            key="btn_download_cv"
+        )
+
+    with tab_cl:
+        st.subheader("Formal, In-Depth Cover Letter")
+        st.text_area("Cover Letter Preview:", value=clean_text(data.get("cover_letter", "")), height=380, key="cl_preview_area")
+        
+        st.download_button(
+            label="📥 Download Cover Letter (PDF)",
+            data=st.session_state.cl_pdf_bytes,
+            file_name=f"Sudha_Panthi_Cover_Letter_{active_role.replace(' ', '_')}.pdf",
+            mime="application/pdf",
+            key="btn_download_cl"
+        )
