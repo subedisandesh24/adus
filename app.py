@@ -16,6 +16,10 @@ import unicodedata
 # -------------------------------------------------------------------------
 @st.cache_resource
 def setup_calibri_fonts():
+    """
+    Finds native Calibri on Windows or downloads Carlito (Google's metric-identical
+    open-source Calibri twin) for Streamlit Cloud/Linux.
+    """
     win_dir = "C:\\Windows\\Fonts"
     win_reg = os.path.join(win_dir, "calibri.ttf")
     win_bold = os.path.join(win_dir, "calibrib.ttf")
@@ -47,6 +51,7 @@ def setup_calibri_fonts():
 # 2. Clean Text Function (Removes '???' and raw asterisks)
 # -------------------------------------------------------------------------
 def clean_text(val):
+    """Safely converts unicode to clean ASCII, stripping characters that turn into '???' and removes stray asterisks"""
     if val is None:
         return ""
     if isinstance(val, list):
@@ -54,7 +59,7 @@ def clean_text(val):
     elif not isinstance(val, str):
         val = str(val)
 
-    # Remove markdown asterisks to prevent raw '*word*' mistakes
+    # Strip markdown asterisks to guarantee zero raw '*word*' mistakes
     val = val.replace("**", "").replace("*", "")
 
     replacements = {
@@ -94,10 +99,12 @@ class CompleteCVPDF(FPDF):
         self.set_y(14)
         self.set_x(self.l_margin)
         
+        # Name on Left
         self.set_font(self.font_family, "B", 18)
         self.set_text_color(20, 20, 20)
         self.cell(90, 10, "SUDHA PANTHI", align="L")
         
+        # Contact Details on Right
         contact_x = self.w - self.r_margin - 88
         self.set_font(self.font_family, "", 9)
         
@@ -416,93 +423,122 @@ if st.session_state.scanned_data:
     if target_role:
         st.write("")
         if st.button(f"🚀 Generate Application for '{target_role}'", type="primary"):
-            with st.spinner(f"Crafting clean application in Calibri typography..."):
+            with st.spinner(f"Crafting evidence-based INGO application in Calibri typography..."):
                 try:
                     client = Groq(api_key=api_key)
                     text_model, vision_model = get_groq_active_models(client)
 
                     today_formatted = datetime.today().strftime("%B %d, %Y")
 
+                    # In-depth INGO Recruitment Excellence Prompt
                     full_prompt = f"""
-                    You are an expert HR recruitment specialist for national and international NGOs in Nepal (UN, USAID, FCDO partners, Save the Children, CARE).
+                    You are a senior recruitment director and technical advisor for international and national NGOs in Nepal (UN agencies, USAID, FCDO, EU partners, Save the Children, CARE, Plan International).
+                    
                     Candidate: SUDHA PANTHI (Phone: +977-9860906707, Email: Sudha.panthee@gmail.com).
                     Target Position: {target_role}
                     Organization: {org_name}
                     Today's Exact Date: {today_formatted}
 
-                    CRITICAL FACTUAL & FORMATTING RULES:
-                    1. STRICT DEGREE ACCURACY:
-                       - Sudha's degree is ONLY: Bachelor of Science in Agriculture (B.Sc. Agriculture) and ongoing Master of Science in Agriculture (M.Sc. Agriculture) from IAAS, Tribhuvan University.
-                       - DO NOT state she has a degree in "Rural Development" or any other subject.
-                    
-                    2. NO ASTERISKS / NO RAW MARKDOWN:
-                       - DO NOT use markdown asterisks (* or **) anywhere in the cover letter or bullets.
-                       - Write in clean, formal, professional English text without any symbols.
+                    CRITICAL CANDIDATE PROFILE & EVIDENCE BASE:
+                    - Degree: Bachelor of Science in Agriculture (B.Sc. Agriculture) from IAAS Tribhuvan University (Percentage: 75.38%, IDF Scholarship). Ongoing Master of Science in Agriculture (M.Sc. Agriculture, IAAS TU, 2025-Present).
+                    - STRICT FACT: DO NOT state she has a degree in "Rural Development" or any other subject.
+                    - Verified Track Record:
+                      1. Nepal Development Research Institute (NDRI, MATSYA Project - Modernising Aquaculture in Nepal, Feb-May 2025):
+                         Field Researcher: KIIs with fish farmers, breeders, government officers; FGD facilitation on value chain bottlenecks; door-to-door household questionnaires; transcription & reporting; real-time digital survey management using Kobo Toolbox.
+                      2. National Agriculture Research Centre (NARC, Government of Nepal, Agronomy Division, 2023-2024):
+                         Research Assistant: Guided Junior Technical Assistants (JTAs) on field agronomy trials; pipeline wheat variety field/lab experiments; data recording, statistical analysis, interpretation, and progress report writing.
+                      3. Global Peace Foundation (June 2023-Feb 2024):
+                         Fellow: Community needs assessment using Priority Matrix, Preference Ranking, and Logframe design; implemented 'Building a Path for Organic Community' in remote Tanahu village training 36 local farmers on efficient water management, nursery beds, IPM, and liquid bio-fertilizer (Jhol Mol); leadership & food waste reduction training in Lamjung (70 participants); menstrual hygiene/sustainable environment training at SOS Hermann Gmeiner School (75 students).
+                      4. Harihar Women Savings and Loan Cooperatives Limited (Pokhara, April-May 2024):
+                         Trainer: Delivered 7-day training on off-season vegetable cultivation and IPM; practical crop demonstrations for women cooperative members.
+                      5. Technical Skills & Tools: Kobo Toolbox, Arc-GIS, RStudio, GenStat, SPSS, MS Office.
 
-                    3. DATE MANDATE:
-                       - Start the cover letter text with today's real date: {today_formatted}.
-                       - NEVER use placeholders like "[Date]".
+                    ========================================================================
+                    SECTION A: IN-DEPTH, EVIDENCE-BASED COVER LETTER (~1 TO 1.2 PAGES)
+                    ========================================================================
+                    - Tone: Professional, confident, sincere, human, development-oriented, and practical. Avoid generic corporate jargon or exaggerated flattery.
+                    - Evidence-Based: NEVER write self-flattering adjectives like "I am a hardworking, passionate, and highly motivated professional." Instead, SHOW evidence: "Through my work with smallholder farmers, women cooperatives, and research trials, I have managed digital survey tools, facilitated participatory training, and executed field trials."
+                    - Natural INGO Terminology: Weave in relevant development terms based on the JD: food security, livelihoods, resilience, inclusion (GESI), value chains, climate adaptation, capacity building, safeguarding, and MEAL.
+                    - 5-Paragraph Structure:
+                      * Paragraph 1 (Opening): Exact position, organization, clear professional identity (Agriculture & Livelihoods professional with hands-on field research, community mobilization, and digital data experience), and specific motivation aligned with the project's development outcomes.
+                      * Paragraph 2 (Relevant Experience & Achievements): Concrete responsibilities and evidence from NDRI (aquaculture survey, Kobo Toolbox, multi-stakeholder KIIs/FGDs) and NARC (wheat trials, JTA supervision, agronomic data).
+                      * Paragraph 3 (Community Mobilization & Field Reality): Grassroots mobilization in Tanahu (training 36 farmers on water management, IPM, Jhol Mol), Harihar women cooperative (off-season vegetables), showing ability to work effectively beyond academic settings with farmers, cooperatives, and local government bodies.
+                      * Paragraph 4 (Technical Competence + Development Alignment): Connecting agricultural science + field implementation + digital tools (Kobo Toolbox/GIS/RStudio) to the organization's specific programme goals.
+                      * Paragraph 5 (Closing): Concrete contribution, adherence to safeguarding and humanitarian principles, availability, and formal sign-off.
+                    - Date Mandate: Start strictly with: "{today_formatted}\\n\\nHiring Committee\\n{org_name}\\n..."
+                    - Closing: Formally end with:
+                      "Sincerely,\\nSudha Panthi\\nPhone: +977-9860906707\\nEmail: Sudha.panthee@gmail.com\\nLalitpur / Kathmandu, Nepal"
 
-                    4. MAJOR WORKS UNDER EXPERIENCE:
-                       - Provide 4 to 6 detailed, action-packed bullet points per organization.
-                       - Ground duties strictly in her authentic organizations:
-                         * Nepal Development Research Institute (MATSYA Project, Feb-May 2025): Fisheries KII/FGDs, Kobo Toolbox real-time survey management, stakeholder qualitative transcription.
-                         * National Agriculture Research Centre (NARC Agronomy Division, 2023-2024): Pipeline wheat trials, JTA field guidance, laboratory & agronomic data analysis, technical research reporting.
-                         * Global Peace Foundation (June 2023-Feb 2024): Priority matrix/logframe community assessments, Tanahu organic farming/water management/IPM/Jhol Mol implementation, leadership & food security capacity building.
-                         * Harihar Women Savings and Loan Cooperatives Limited (April-May 2024): 7-day training on off-season vegetables, crop demonstration, IPM for women farmers.
+                    ========================================================================
+                    SECTION B: INGO-TAILORED CV (MOVING FROM ACADEMIC TO DEVELOPMENT CV)
+                    ========================================================================
+                    1. Professional Identity Tagline:
+                       A strong, scannable headline matching the vacancy, e.g.:
+                       "Agriculture & Livelihoods Professional | Food Security | Value Chains | Climate Resilience | MEAL"
+                    2. Tailored Professional Summary:
+                       3-4 impactful lines answering: Who are you? What sectors do you work in? What stakeholders have you engaged? What development outcomes do you deliver?
+                    3. Core Competencies Matrix:
+                       A scannable list of 8-12 prioritized competencies directly aligned to the JD (e.g., Climate-Resilient Agriculture, Agricultural Value Chains, Smallholder Livelihoods, Community Mobilization & GESI, Training & Facilitation, MEAL & Kobo Toolbox, Stakeholder Coordination, Agronomic Field Research).
+                    4. Professional Experience (Action + What + Who/Where + Result):
+                       Provide 4-5 substantive, action-packed bullet points for each of the 4 authentic organizations. Use genuine numbers where available (36 farmers, 70 participants, 75 students, KIIs/FGDs). DO NOT invent new organizations.
 
-                    5. COMPREHENSIVE COVER LETTER:
-                       - 4 detailed, formal paragraphs addressed to Hiring Committee / {target_role}.
-                       - Include Sudha's contact info (+977-9860906707 | Sudha.panthee@gmail.com).
+                    ========================================================================
+                    SECTION C: ADMINISTRATIVE GMAIL APPLICATION MESSAGE
+                    ========================================================================
+                    - Brief, formal, clear, and administrative email body.
+                    - Clearly state position and source.
+                    - 1-2 sentence suitability statement highlighting B.Sc. Agriculture and relevant field experience.
+                    - Clear checklist of attached documents:
+                      1. Curriculum Vitae (CV)
+                      2. Cover Letter
+                      3. Academic Transcripts and Certificates (B.Sc. Agriculture, IAAS TU)
+                      4. Copy of Nepali Citizenship Certificate (Nagarikta)
+                      5. Relevant Training & Experience Certificates
 
-                    6. GMAIL APPLICATION EMAIL:
-                       - Subject line and formal Gmail body listing attached documents: CV (PDF), Cover Letter (PDF), Academic Transcripts, and Nagarikta.
+                    NO ASTERISKS RULE: Do NOT use markdown asterisks (* or **) in any JSON string. Write clean, formal, standard English text.
 
-                    Return valid JSON only:
+                    Return valid JSON only matching this exact schema:
                     {{
                         "vacancy_details": {{
                             "job_title": "{target_role}",
                             "organization": "{org_name}"
                         }},
-                        "email_subject": "Application for {target_role} - Sudha Panthi",
-                        "email_body": "Formal Gmail body text with attached documents checklist and contact details...",
-                        "tailored_career_objective": "3-5 lines tailored to {target_role} without asterisks",
-                        "tailored_skills": {{
-                            "computer": "Microsoft Office, Adobe Photoshop, Adobe Illustrator, Arc-GIS, RStudio, GenStat, SPSS, Kobo Toolbox",
-                            "languages": "Nepali (Native), English (Fluent)",
-                            "targeted_technical_and_soft_skills": "6-8 prioritized competencies"
-                        }},
+                        "cv_professional_tagline": "Agriculture & Livelihoods Professional | Food Security | Value Chains | Climate Resilience | MEAL",
+                        "cv_professional_summary": "3-4 lines tailored professional summary...",
+                        "cv_core_competencies": ["Competency 1", "Competency 2", "Competency 3", "Competency 4", "Competency 5", "Competency 6", "Competency 7", "Competency 8"],
                         "tailored_experience": [
                             {{
                                 "organization": "Nepal Development Research Institute",
                                 "location": "Sanepa, Lalitpur",
                                 "role": "Field Researcher, MATSYA Project (Modernising Aquaculture in Nepal)",
                                 "dates": "February-May,2025",
-                                "bullets": ["Detailed clean bullet without asterisks", "Detailed clean bullet"]
+                                "bullets": ["Detailed action-result bullet 1", "Detailed action-result bullet 2", "Detailed action-result bullet 3", "Detailed action-result bullet 4"]
                             }},
                             {{
                                 "organization": "National Agriculture Research Centre, Government of Nepal (Agronomy Division)",
                                 "location": "Khumaltar, Lalitpur",
                                 "role": "Research Assistant",
                                 "dates": "2023-2024",
-                                "bullets": ["Detailed clean bullet without asterisks", "Detailed clean bullet"]
+                                "bullets": ["Detailed action-result bullet 1", "Detailed action-result bullet 2", "Detailed action-result bullet 3", "Detailed action-result bullet 4"]
                             }},
                             {{
                                 "organization": "Global Peace Foundation",
                                 "location": "Nepal",
                                 "role": "Fellowship, Global Peacebuilders Leadership Program",
                                 "dates": "June 2023-February 2024",
-                                "bullets": ["Detailed clean bullet without asterisks", "Detailed clean bullet"]
+                                "bullets": ["Detailed action-result bullet 1", "Detailed action-result bullet 2", "Detailed action-result bullet 3", "Detailed action-result bullet 4"]
                             }},
                             {{
                                 "organization": "Harihar Women Savings and Loan Cooperatives Limited",
                                 "location": "Pokhara, Nepal",
                                 "role": "Trainer",
                                 "dates": "April 29-May 5,2024",
-                                "bullets": ["Detailed clean bullet without asterisks", "Detailed clean bullet"]
+                                "bullets": ["Detailed action-result bullet 1", "Detailed action-result bullet 2", "Detailed action-result bullet 3"]
                             }}
                         ],
-                        "cover_letter": "{today_formatted}\\n\\nHiring Committee... (4 thorough paragraphs without any asterisks, ending with Sudha's phone +977-9860906707 and email)"
+                        "cover_letter": "{today_formatted}\\n\\nHiring Committee\\n{org_name}... (5 substantive evidence-based paragraphs, ending with Sudha's contact info)",
+                        "email_subject": "Application for {target_role} - Sudha Panthi",
+                        "email_body": "Formal Gmail body text with attached documents checklist and contact details..."
                     }}
                     """
 
@@ -534,44 +570,58 @@ if st.session_state.scanned_data:
                     )
                     data = json.loads(resp.choices[0].message.content.strip())
 
-                    # Normalize types & date
-                    if isinstance(data.get("tailored_career_objective"), list):
-                        data["tailored_career_objective"] = " ".join(str(x) for x in data["tailored_career_objective"])
-                    if isinstance(data.get("cover_letter"), list):
-                        data["cover_letter"] = "\n\n".join(str(x) for x in data["cover_letter"])
-                    if isinstance(data.get("email_body"), list):
-                        data["email_body"] = "\n\n".join(str(x) for x in data["email_body"])
-
+                    # Post-process Cover Letter Date & replace placeholders
                     raw_cl = clean_text(data.get("cover_letter", ""))
                     raw_cl = re.sub(r'\[\s*Date\s*\]', today_formatted, raw_cl, flags=re.IGNORECASE)
                     if not raw_cl.startswith(today_formatted):
                         raw_cl = f"{today_formatted}\n\n" + raw_cl
                     data["cover_letter"] = raw_cl
 
-                    skills_dict = data.get("tailored_skills", {})
-                    for k in ["computer", "languages", "targeted_technical_and_soft_skills"]:
-                        if isinstance(skills_dict.get(k), list):
-                            skills_dict[k] = ", ".join(str(x) for x in skills_dict[k])
-
                     avail_w = 210 - 16 - 16
 
                     # ---------------------------------------------------------
-                    # BUILD FULL CV PDF
+                    # BUILD INGO-STYLE FULL CV PDF (Calibri)
                     # ---------------------------------------------------------
                     cv_pdf = CompleteCVPDF(doc_type="CV")
                     cv_pdf.add_page()
                     cv_pdf.draw_cv_header()
                     
-                    # 1. Career Objective
-                    cv_pdf.draw_section_heading("Career Objective")
+                    # 1. Professional Identity Tagline
+                    tagline = clean_text(data.get("cv_professional_tagline", "Agriculture & Livelihoods Professional | Food Security | Value Chains | Climate Resilience | MEAL"))
+                    cv_pdf.set_x(cv_pdf.l_margin)
+                    cv_pdf.set_font(cv_pdf.font_family, "B", 10.5)
+                    cv_pdf.set_text_color(0, 80, 160)
+                    cv_pdf.cell(avail_w, 5, tagline, new_x="LMARGIN", new_y="NEXT")
+                    cv_pdf.ln(1)
+
+                    # 2. Tailored Professional Summary
+                    summary_text = clean_text(data.get("cv_professional_summary", ""))
                     cv_pdf.set_x(cv_pdf.l_margin)
                     cv_pdf.set_font(cv_pdf.font_family, "", 9.2)
                     cv_pdf.set_text_color(30, 30, 30)
-                    cv_pdf.multi_cell(avail_w, 4.4, clean_text(data.get("tailored_career_objective", "")), new_x="LMARGIN", new_y="NEXT")
-                    cv_pdf.ln(1)
+                    cv_pdf.multi_cell(avail_w, 4.3, summary_text, new_x="LMARGIN", new_y="NEXT")
+                    cv_pdf.ln(1.5)
 
-                    # 2. Experience
-                    cv_pdf.draw_section_heading("Experience")
+                    # 3. Core Competencies Matrix (Scannable for INGO HR/ATS)
+                    cv_pdf.draw_section_heading("Core Competencies")
+                    competencies = data.get("cv_core_competencies", [])
+                    if isinstance(competencies, list) and competencies:
+                        col_w = avail_w / 2
+                        for i in range(0, len(competencies), 2):
+                            cv_pdf.set_x(cv_pdf.l_margin)
+                            cv_pdf.set_font(cv_pdf.font_family, "", 9)
+                            cv_pdf.set_text_color(35, 35, 35)
+                            c1 = f"[x]  {clean_text(competencies[i])}"
+                            cv_pdf.cell(col_w, 4.2, c1, align="L")
+                            if i + 1 < len(competencies):
+                                c2 = f"[x]  {clean_text(competencies[i+1])}"
+                                cv_pdf.cell(col_w, 4.2, c2, align="L", new_x="LMARGIN", new_y="NEXT")
+                            else:
+                                cv_pdf.ln(4.2)
+                        cv_pdf.ln(1)
+
+                    # 4. Professional Experience (Action + What + Where + Result)
+                    cv_pdf.draw_section_heading("Professional Experience")
                     for org in data.get("tailored_experience", []):
                         raw_bullets = org.get("bullets", [])
                         if raw_bullets:
@@ -583,7 +633,7 @@ if st.session_state.scanned_data:
                                 [clean_text(b) for b in raw_bullets]
                             )
 
-                    # 3. Publication
+                    # 5. Publication (With Clickable Blue DOI Hyperlink)
                     cv_pdf.draw_section_heading("Publication")
                     cv_pdf.set_x(cv_pdf.l_margin)
                     cv_pdf.set_font(cv_pdf.font_family, "", 9)
@@ -596,21 +646,21 @@ if st.session_state.scanned_data:
                     cv_pdf.set_text_color(30, 30, 30)
                     cv_pdf.ln(5)
 
-                    # 4. Projects
-                    cv_pdf.draw_section_heading("Projects")
+                    # 6. Selected Field & Research Projects
+                    cv_pdf.draw_section_heading("Selected Field & Research Projects")
                     cv_pdf.set_font(cv_pdf.font_family, "", 9)
                     for proj in PERMANENT_CV_SECTIONS["projects"]:
                         cv_pdf.set_x(cv_pdf.l_margin)
                         cv_pdf.multi_cell(avail_w, 4.2, f"-  {clean_text(proj)}", new_x="LMARGIN", new_y="NEXT")
                     cv_pdf.ln(1)
 
-                    # 5. Education
+                    # 7. Education
                     cv_pdf.draw_section_heading("Education")
                     for edu in PERMANENT_CV_SECTIONS["education"]:
                         cv_pdf.draw_two_col_entry(edu["inst"], edu["deg"], edu["loc"], edu["yr"])
 
-                    # 6. Leadership Activities
-                    cv_pdf.draw_section_heading("Leadership Activities")
+                    # 8. Leadership Activities
+                    cv_pdf.draw_section_heading("Leadership & Community Engagement")
                     for lead in PERMANENT_CV_SECTIONS["leadership"]:
                         cv_pdf.set_x(cv_pdf.l_margin)
                         cv_pdf.set_font(cv_pdf.font_family, "B", 9.4)
@@ -626,49 +676,42 @@ if st.session_state.scanned_data:
                             cv_pdf.multi_cell(avail_w, 4.0, f"  {clean_text(r_desc)}", new_x="LMARGIN", new_y="NEXT")
                         cv_pdf.ln(1)
 
-                    # 7. Trainings and Workshops
-                    cv_pdf.draw_section_heading("Trainings and Workshops")
+                    # 9. Relevant Trainings and Workshops
+                    cv_pdf.draw_section_heading("Trainings & Capacity Building")
                     for tr_title, tr_org in PERMANENT_CV_SECTIONS["trainings"]:
                         cv_pdf.draw_two_col_entry(tr_title, "", tr_org, "")
 
-                    # 8. Volunteering
-                    cv_pdf.draw_section_heading("Volunteering")
+                    # 10. Volunteering Records
+                    cv_pdf.draw_section_heading("Volunteering & Community Action")
                     for vol_title, vol_org in PERMANENT_CV_SECTIONS["volunteering"]:
                         cv_pdf.draw_two_col_entry(vol_title, "", vol_org, "")
 
-                    # 9. Skills
-                    cv_pdf.draw_section_heading("Skills")
+                    # 11. Technical Tools & Languages
+                    cv_pdf.draw_section_heading("Technical Tools & Languages")
                     cv_pdf.set_x(cv_pdf.l_margin)
                     cv_pdf.set_font(cv_pdf.font_family, "B", 9)
-                    cv_pdf.write(4.2, "Computer: ")
+                    cv_pdf.write(4.2, "Software & Analysis: ")
                     cv_pdf.set_font(cv_pdf.font_family, "", 9)
-                    cv_pdf.write(4.2, f"{clean_text(skills_dict.get('computer', ''))}\n")
+                    cv_pdf.write(4.2, "Kobo Toolbox, Arc-GIS, RStudio, GenStat, SPSS, Microsoft Office, Adobe Illustrator, Adobe Photoshop\n")
                     cv_pdf.ln(1)
 
                     cv_pdf.set_x(cv_pdf.l_margin)
                     cv_pdf.set_font(cv_pdf.font_family, "B", 9)
-                    cv_pdf.write(4.2, "Language: ")
+                    cv_pdf.write(4.2, "Languages: ")
                     cv_pdf.set_font(cv_pdf.font_family, "", 9)
-                    cv_pdf.write(4.2, f"{clean_text(skills_dict.get('languages', ''))}\n")
+                    cv_pdf.write(4.2, "Nepali (Native), English (Professional Working Proficiency)\n")
                     cv_pdf.ln(1)
 
-                    cv_pdf.set_x(cv_pdf.l_margin)
-                    cv_pdf.set_font(cv_pdf.font_family, "B", 9)
-                    cv_pdf.write(4.2, "Vacancy Skills: ")
-                    cv_pdf.set_font(cv_pdf.font_family, "", 9)
-                    cv_pdf.write(4.2, f"{clean_text(skills_dict.get('targeted_technical_and_soft_skills', ''))}\n")
-                    cv_pdf.ln(1)
-
-                    # 10. Referees (Bhimsen Chaulagain's phone: 9860679982)
+                    # 12. Professional Referees (Bhimsen Chaulagain's phone: 9860679982)
                     cv_pdf.draw_section_heading("Referees")
                     for ref in PERMANENT_CV_SECTIONS["referees"]:
                         cv_pdf.set_x(cv_pdf.l_margin)
                         cv_pdf.set_font(cv_pdf.font_family, "B", 9.2)
                         cv_pdf.cell(70, 4, clean_text(ref["name"]), align="L")
-                        cv_pdf.set_font(cv_pdf.font_family, "", 9)
+                        cv_pdf.set_font("Helvetica", "", 9)
                         cv_pdf.cell(avail_w - 70, 4, f"{clean_text(ref['phone'])} | {clean_text(ref['email'])}", align="R", new_x="LMARGIN", new_y="NEXT")
                         cv_pdf.set_x(cv_pdf.l_margin)
-                        cv_pdf.set_font(cv_pdf.font_family, "I", 8.8)
+                        cv_pdf.set_font("Helvetica", "I", 8.8)
                         cv_pdf.cell(avail_w, 3.8, clean_text(ref["title"]), new_x="LMARGIN", new_y="NEXT")
                         cv_pdf.ln(1.5)
 
@@ -676,7 +719,7 @@ if st.session_state.scanned_data:
                     cv_pdf.output(cv_buf)
                     
                     # ---------------------------------------------------------
-                    # BUILD COVER LETTER PDF
+                    # BUILD EVIDENCE-BASED COVER LETTER PDF (1 to 1.2 Pages)
                     # ---------------------------------------------------------
                     cl_pdf = CompleteCVPDF(doc_type="Cover Letter")
                     cl_pdf.add_page()
@@ -684,9 +727,9 @@ if st.session_state.scanned_data:
                     cl_pdf.draw_section_heading(f"Application for {target_role}")
                     
                     cl_pdf.set_x(cl_pdf.l_margin)
-                    cl_pdf.set_font(cl_pdf.font_family, "", 9.8)
+                    cl_pdf.set_font(cl_pdf.font_family, "", 9.5)
                     cl_pdf.set_text_color(30, 30, 30)
-                    cl_pdf.multi_cell(avail_w, 4.8, clean_text(data.get("cover_letter", "")), new_x="LMARGIN", new_y="NEXT")
+                    cl_pdf.multi_cell(avail_w, 4.7, clean_text(data.get("cover_letter", "")), new_x="LMARGIN", new_y="NEXT")
                     
                     cl_buf = io.BytesIO()
                     cl_pdf.output(cl_buf)
@@ -712,10 +755,17 @@ if st.session_state.generated_app_data is not None:
     tab_cv, tab_cl, tab_email = st.tabs(["CV", "Cover Letter", "Email"])
 
     with tab_cv:
-        st.markdown("### Career Objective")
-        st.write(clean_text(data.get("tailored_career_objective", "")))
+        st.markdown(f"### {clean_text(data.get('cv_professional_tagline', ''))}")
+        st.write(clean_text(data.get("cv_professional_summary", "")))
 
-        st.markdown("### Experience")
+        st.markdown("#### Core Competencies")
+        comps = data.get("cv_core_competencies", [])
+        if comps:
+            cols = st.columns(3)
+            for idx, comp in enumerate(comps):
+                cols[idx % 3].write(f"✔ {clean_text(comp)}")
+
+        st.markdown("#### Professional Experience")
         for org in data.get("tailored_experience", []):
             with st.expander(f"📍 {clean_text(org.get('organization', ''))} - {clean_text(org.get('role', ''))}", expanded=True):
                 for b in org.get("bullets", []):
@@ -732,8 +782,8 @@ if st.session_state.generated_app_data is not None:
         )
 
     with tab_cl:
-        st.subheader("Cover Letter")
-        st.text_area("Cover Letter Preview:", value=clean_text(data.get("cover_letter", "")), height=400, key="cl_preview_area")
+        st.subheader("Cover Letter (Evidence-Based & JD Aligned)")
+        st.text_area("Cover Letter Preview:", value=clean_text(data.get("cover_letter", "")), height=460, key="cl_preview_area")
         
         # Download button placed at the end of the Cover Letter tab
         st.write("")
@@ -746,10 +796,10 @@ if st.session_state.generated_app_data is not None:
         )
 
     with tab_email:
-        st.subheader("Email Template")
+        st.subheader("Email Template (Formal & Administrative)")
         email_sub = clean_text(data.get("email_subject", f"Application for {current_target} - Sudha Panthi"))
         st.text_input("Subject Line:", value=email_sub, key="email_sub_input")
 
         email_msg = clean_text(data.get("email_body", ""))
         st.text_area("Email Body:", value=email_msg, height=350, key="email_body_area")
-        st.caption("Attach your CV (PDF), Cover Letter (PDF), Transcripts, and Nagarikta before sending.")
+        st.caption("📎 Attach your CV (PDF), Cover Letter (PDF), Transcripts, and Nagarikta before sending.")
