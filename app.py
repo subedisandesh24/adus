@@ -16,10 +16,6 @@ import unicodedata
 # -------------------------------------------------------------------------
 @st.cache_resource
 def setup_calibri_fonts():
-    """
-    Finds native Calibri on Windows or downloads Carlito (Google's metric-identical
-    open-source Calibri twin) for Streamlit Cloud/Linux.
-    """
     win_dir = "C:\\Windows\\Fonts"
     win_reg = os.path.join(win_dir, "calibri.ttf")
     win_bold = os.path.join(win_dir, "calibrib.ttf")
@@ -51,7 +47,6 @@ def setup_calibri_fonts():
 # 2. Clean Text Function (Removes '???' and raw asterisks)
 # -------------------------------------------------------------------------
 def clean_text(val):
-    """Safely converts unicode to clean ASCII, stripping characters that turn into '???' and removes stray asterisks"""
     if val is None:
         return ""
     if isinstance(val, list):
@@ -96,29 +91,23 @@ class CompleteCVPDF(FPDF):
         return self.w - self.l_margin - self.r_margin
 
     def draw_cv_header(self):
-        """Header matching Sudha's CV with blue LinkedIn hyperlink"""
         self.set_y(14)
         self.set_x(self.l_margin)
         
-        # Name on Left
         self.set_font(self.font_family, "B", 18)
         self.set_text_color(20, 20, 20)
         self.cell(90, 10, "SUDHA PANTHI", align="L")
         
-        # Contact Details on Right
         contact_x = self.w - self.r_margin - 88
         self.set_font(self.font_family, "", 9)
         
-        # Phone
         self.set_xy(contact_x, 14)
         self.set_text_color(60, 60, 60)
         self.cell(88, 3.8, "+977-9860906707", align="R", new_x="LMARGIN", new_y="NEXT")
         
-        # Email
         self.set_x(contact_x)
         self.cell(88, 3.8, "Sudha.panthee@gmail.com", align="R", new_x="LMARGIN", new_y="NEXT")
         
-        # LinkedIn with Blue Hyperlink
         self.set_x(contact_x)
         self.set_text_color(0, 80, 200)
         self.cell(
@@ -132,7 +121,6 @@ class CompleteCVPDF(FPDF):
         self.ln(3)
 
     def draw_section_heading(self, title):
-        """Heading with horizontal divider line"""
         avail_w = self.printable_width
         self.ln(2)
         self.set_x(self.l_margin)
@@ -147,7 +135,6 @@ class CompleteCVPDF(FPDF):
         self.ln(2.5)
 
     def draw_org_block(self, org_name, location, role_title, dates, bullets):
-        """Organization Block with clean bullets"""
         avail_w = self.printable_width
         col_left = 115
         col_right = avail_w - col_left
@@ -174,7 +161,6 @@ class CompleteCVPDF(FPDF):
         self.ln(1.5)
 
     def draw_two_col_entry(self, left_bold, left_sub, right_txt, right_sub=""):
-        """Two-column layout"""
         avail_w = self.printable_width
         col_left = 118
         col_right = avail_w - col_left
@@ -195,7 +181,6 @@ class CompleteCVPDF(FPDF):
         self.ln(1)
 
     def footer(self):
-        """Page Footer"""
         self.set_y(-12)
         self.set_x(self.l_margin)
         self.set_font(self.font_family, "", 8.5)
@@ -229,7 +214,7 @@ def get_groq_active_models(client):
 
 
 # -------------------------------------------------------------------------
-# 5. Permanent CV Database (With Exact DOI & Bhimsen's Phone)
+# 5. Permanent CV Database (Exact DOI & Bhimsen's Phone)
 # -------------------------------------------------------------------------
 PERMANENT_CV_SECTIONS = {
     "publication_text": "Impact of Farmers' Marketing Decisions on Profitability in Wheat: A Case Study of Kailali District - American Journal of Applied Statistics and Economics. ",
@@ -296,17 +281,17 @@ PERMANENT_CV_SECTIONS = {
 }
 
 # -------------------------------------------------------------------------
-# 6. Streamlit App & State Management
+# 6. Streamlit Progressive Workflow State
 # -------------------------------------------------------------------------
 st.set_page_config(page_title="Sudha Panthi - Application Matcher", layout="wide")
 
 st.title("🌱 NGO/INGO Application Generator")
 
-# Initialize Session State
-if "detected_positions" not in st.session_state:
-    st.session_state.detected_positions = []
-if "target_position" not in st.session_state:
-    st.session_state.target_position = ""
+# Initialize Session State Variables
+if "scanned_data" not in st.session_state:
+    st.session_state.scanned_data = None
+if "selected_position" not in st.session_state:
+    st.session_state.selected_position = ""
 if "generated_app_data" not in st.session_state:
     st.session_state.generated_app_data = None
 if "cv_pdf_bytes" not in st.session_state:
@@ -344,384 +329,382 @@ else:
 has_input = (bool(vacancy_text.strip()) if "Paste" in input_mode else uploaded_image_bytes is not None)
 
 # -------------------------------------------------------------------------
-# STEP 1: POSITION SECTION (ALWAYS VISIBLE)
+# STAGE 1: ONLY SHOW "Scan Notice" WHEN INPUT IS INSERTED
 # -------------------------------------------------------------------------
-st.markdown("---")
-st.subheader("🎯 Step 1: Target Position")
+if has_input and api_key:
+    st.markdown("---")
+    if st.button("🔍 Scan Notice", type="secondary"):
+        with st.spinner("Scanning notice for positions and organization..."):
+            try:
+                client = Groq(api_key=api_key)
+                text_model, vision_model = get_groq_active_models(client)
 
-col_p1, col_p2 = st.columns([2, 1])
+                scan_prompt = """
+                Scan this job announcement and extract:
+                1. The organization name.
+                2. All distinct individual job vacancies/positions available.
+                Return valid JSON only:
+                {
+                    "organization": "Organization Name",
+                    "positions": ["Job Title 1", "Job Title 2"]
+                }
+                If only one position is mentioned, return a list with that single position.
+                """
 
-with col_p2:
-    st.write("")
-    st.write("")
-    scan_clicked = st.button("🔍 Scan Notice for Positions", disabled=not (has_input and api_key))
+                if "Paste" in input_mode:
+                    msgs = [
+                        {"role": "system", "content": scan_prompt},
+                        {"role": "user", "content": f"VACANCY TEXT:\n{vacancy_text}"}
+                    ]
+                    scan_model = text_model
+                else:
+                    scan_model = vision_model
+                    b64_img = base64.b64encode(uploaded_image_bytes).decode("utf-8")
+                    msgs = [
+                        {"role": "system", "content": scan_prompt},
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": "Extract organization and positions in JSON:"},
+                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}}
+                            ]
+                        }
+                    ]
 
-if scan_clicked:
-    with st.spinner("Scanning notice for positions..."):
-        try:
-            client = Groq(api_key=api_key)
-            text_model, vision_model = get_groq_active_models(client)
-
-            scan_prompt = """
-            Scan this job announcement and list all individual job vacancies/positions available.
-            Return a JSON object:
-            {
-                "organization": "Organization Name",
-                "positions": ["Job Title 1", "Job Title 2"]
-            }
-            If only one position is mentioned, return a list with that single position.
-            """
-
-            if "Paste" in input_mode:
-                msgs = [
-                    {"role": "system", "content": scan_prompt},
-                    {"role": "user", "content": f"VACANCY TEXT:\n{vacancy_text}"}
-                ]
-                scan_model = text_model
-            else:
-                scan_model = vision_model
-                b64_img = base64.b64encode(uploaded_image_bytes).decode("utf-8")
-                msgs = [
-                    {"role": "system", "content": scan_prompt},
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": "List all positions in this notice in JSON:"},
-                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}}
-                        ]
-                    }
-                ]
-
-            res = client.chat.completions.create(
-                model=scan_model,
-                messages=msgs,
-                response_format={"type": "json_object"},
-                temperature=0.1
-            )
-            parsed_scan = json.loads(res.choices[0].message.content)
-            detected = parsed_scan.get("positions", [])
-            st.session_state.detected_positions = detected
-            if detected:
-                st.session_state.target_position = detected[0]
-        except Exception as e:
-            st.error(f"Scan error: {e}")
-
-with col_p1:
-    if st.session_state.detected_positions:
-        if len(st.session_state.detected_positions) > 1:
-            selected_pos = st.selectbox(
-                "Detected Vacancies (Select one or type below):",
-                options=st.session_state.detected_positions,
-                index=0
-            )
-            st.session_state.target_position = selected_pos
-        else:
-            st.session_state.target_position = st.session_state.detected_positions[0]
-    
-    # Always display the confirmed target position in an editable text box
-    target_role = st.text_input(
-        "Target Position (Auto-detected or Type manually):",
-        value=st.session_state.target_position,
-        placeholder="e.g. Project Officer, Agriculture Coordinator, Field Researcher"
-    )
-    st.session_state.target_position = target_role
+                res = client.chat.completions.create(
+                    model=scan_model,
+                    messages=msgs,
+                    response_format={"type": "json_object"},
+                    temperature=0.1
+                )
+                parsed_scan = json.loads(res.choices[0].message.content)
+                st.session_state.scanned_data = parsed_scan
+                positions = parsed_scan.get("positions", [])
+                if positions:
+                    st.session_state.selected_position = positions[0]
+            except Exception as e:
+                st.error(f"Scan error: {e}")
 
 # -------------------------------------------------------------------------
-# STEP 2: GENERATE APPLICATION
+# STAGE 2 & 3: DISPLAY FINDINGS, ALLOW CHOICE, THEN SHOW "Generate Application"
 # -------------------------------------------------------------------------
-st.markdown("### 🚀 Step 2: Generate Application")
-can_generate = bool(target_role.strip()) and has_input and bool(api_key)
+if st.session_state.scanned_data:
+    org_name = st.session_state.scanned_data.get("organization", "Organization")
+    positions = st.session_state.scanned_data.get("positions", [])
+    total_vacancies = len(positions)
 
-if st.button("Generate Complete Application", type="primary", disabled=not can_generate):
-    with st.spinner(f"Crafting clean application for '{target_role}' in Calibri typography..."):
-        try:
-            client = Groq(api_key=api_key)
-            text_model, vision_model = get_groq_active_models(client)
+    st.markdown("---")
+    st.info(f"🏢 **Organization:** {org_name}  |  📋 **Total Vacancies Found:** {total_vacancies}")
 
-            today_formatted = datetime.today().strftime("%B %d, %Y")
+    if total_vacancies > 1:
+        chosen_pos = st.selectbox(
+            "Select which vacancy you want to apply for:",
+            options=positions,
+            index=0
+        )
+        st.session_state.selected_position = chosen_pos
+    elif total_vacancies == 1:
+        st.session_state.selected_position = positions[0]
+        st.write(f"🎯 **Target Position:** {positions[0]}")
+    else:
+        manual_pos = st.text_input("Enter Position Title:", value="Project Officer")
+        st.session_state.selected_position = manual_pos
 
-            full_prompt = f"""
-            You are an expert HR recruitment specialist for national and international NGOs in Nepal (UN, USAID, FCDO partners, Save the Children, CARE).
-            Candidate: SUDHA PANTHI (Phone: +977-9860906707, Email: Sudha.panthee@gmail.com).
-            Target Position: {target_role}
-            Today's Exact Date: {today_formatted}
+    target_role = st.session_state.selected_position
 
-            CRITICAL FACTUAL & FORMATTING RULES:
-            1. STRICT DEGREE ACCURACY:
-               - Sudha's degree is ONLY: Bachelor of Science in Agriculture (B.Sc. Agriculture) and ongoing Master of Science in Agriculture (M.Sc. Agriculture) from IAAS, Tribhuvan University.
-               - DO NOT state she has a degree in "Rural Development" or any other subject.
-            
-            2. NO ASTERISKS / NO RAW MARKDOWN:
-               - DO NOT use markdown asterisks (* or **) anywhere in the cover letter or bullets.
-               - Write in clean, formal, professional English text without any symbols.
+    # STAGE 3: Show Generate Application Button AFTER choosing
+    if target_role:
+        st.write("")
+        if st.button(f"🚀 Generate Application for '{target_role}'", type="primary"):
+            with st.spinner(f"Crafting clean application in Calibri typography..."):
+                try:
+                    client = Groq(api_key=api_key)
+                    text_model, vision_model = get_groq_active_models(client)
 
-            3. DATE MANDATE:
-               - Start the cover letter text with today's real date: {today_formatted}.
-               - NEVER use placeholders like "[Date]".
+                    today_formatted = datetime.today().strftime("%B %d, %Y")
 
-            4. MAJOR WORKS UNDER EXPERIENCE:
-               - Provide 4 to 6 detailed, action-packed bullet points per organization.
-               - Ground duties strictly in her authentic organizations:
-                 * Nepal Development Research Institute (MATSYA Project, Feb-May 2025): Fisheries KII/FGDs, Kobo Toolbox real-time survey management, stakeholder qualitative transcription.
-                 * National Agriculture Research Centre (NARC Agronomy Division, 2023-2024): Pipeline wheat trials, JTA field guidance, laboratory & agronomic data analysis, technical research reporting.
-                 * Global Peace Foundation (June 2023-Feb 2024): Priority matrix/logframe community assessments, Tanahu organic farming/water management/IPM/Jhol Mol implementation, leadership & food security capacity building.
-                 * Harihar Women Savings and Loan Cooperatives Limited (April-May 2024): 7-day training on off-season vegetables, crop demonstration, IPM for women farmers.
+                    full_prompt = f"""
+                    You are an expert HR recruitment specialist for national and international NGOs in Nepal (UN, USAID, FCDO partners, Save the Children, CARE).
+                    Candidate: SUDHA PANTHI (Phone: +977-9860906707, Email: Sudha.panthee@gmail.com).
+                    Target Position: {target_role}
+                    Organization: {org_name}
+                    Today's Exact Date: {today_formatted}
 
-            5. COMPREHENSIVE COVER LETTER:
-               - 4 detailed, formal paragraphs addressed to Hiring Committee / {target_role}.
-               - Include Sudha's contact info (+977-9860906707 | Sudha.panthee@gmail.com).
+                    CRITICAL FACTUAL & FORMATTING RULES:
+                    1. STRICT DEGREE ACCURACY:
+                       - Sudha's degree is ONLY: Bachelor of Science in Agriculture (B.Sc. Agriculture) and ongoing Master of Science in Agriculture (M.Sc. Agriculture) from IAAS, Tribhuvan University.
+                       - DO NOT state she has a degree in "Rural Development" or any other subject.
+                    
+                    2. NO ASTERISKS / NO RAW MARKDOWN:
+                       - DO NOT use markdown asterisks (* or **) anywhere in the cover letter or bullets.
+                       - Write in clean, formal, professional English text without any symbols.
 
-            6. GMAIL APPLICATION EMAIL:
-               - Subject line and formal Gmail body listing attached documents: CV (PDF), Cover Letter (PDF), Academic Transcripts, and Nagarikta.
+                    3. DATE MANDATE:
+                       - Start the cover letter text with today's real date: {today_formatted}.
+                       - NEVER use placeholders like "[Date]".
 
-            Return valid JSON only:
-            {{
-                "vacancy_details": {{
-                    "job_title": "{target_role}",
-                    "organization": "string"
-                }},
-                "email_subject": "Application for {target_role} - Sudha Panthi",
-                "email_body": "Formal Gmail body text with attached documents checklist and contact details...",
-                "tailored_career_objective": "3-5 lines tailored to {target_role} without asterisks",
-                "tailored_skills": {{
-                    "computer": "Microsoft Office, Adobe Photoshop, Adobe Illustrator, Arc-GIS, RStudio, GenStat, SPSS, Kobo Toolbox",
-                    "languages": "Nepali (Native), English (Fluent)",
-                    "targeted_technical_and_soft_skills": "6-8 prioritized competencies"
-                }},
-                "tailored_experience": [
+                    4. MAJOR WORKS UNDER EXPERIENCE:
+                       - Provide 4 to 6 detailed, action-packed bullet points per organization.
+                       - Ground duties strictly in her authentic organizations:
+                         * Nepal Development Research Institute (MATSYA Project, Feb-May 2025): Fisheries KII/FGDs, Kobo Toolbox real-time survey management, stakeholder qualitative transcription.
+                         * National Agriculture Research Centre (NARC Agronomy Division, 2023-2024): Pipeline wheat trials, JTA field guidance, laboratory & agronomic data analysis, technical research reporting.
+                         * Global Peace Foundation (June 2023-Feb 2024): Priority matrix/logframe community assessments, Tanahu organic farming/water management/IPM/Jhol Mol implementation, leadership & food security capacity building.
+                         * Harihar Women Savings and Loan Cooperatives Limited (April-May 2024): 7-day training on off-season vegetables, crop demonstration, IPM for women farmers.
+
+                    5. COMPREHENSIVE COVER LETTER:
+                       - 4 detailed, formal paragraphs addressed to Hiring Committee / {target_role}.
+                       - Include Sudha's contact info (+977-9860906707 | Sudha.panthee@gmail.com).
+
+                    6. GMAIL APPLICATION EMAIL:
+                       - Subject line and formal Gmail body listing attached documents: CV (PDF), Cover Letter (PDF), Academic Transcripts, and Nagarikta.
+
+                    Return valid JSON only:
                     {{
-                        "organization": "Nepal Development Research Institute",
-                        "location": "Sanepa, Lalitpur",
-                        "role": "Field Researcher, MATSYA Project (Modernising Aquaculture in Nepal)",
-                        "dates": "February-May,2025",
-                        "bullets": ["Detailed clean bullet without asterisks", "Detailed clean bullet"]
-                    }},
-                    {{
-                        "organization": "National Agriculture Research Centre, Government of Nepal (Agronomy Division)",
-                        "location": "Khumaltar, Lalitpur",
-                        "role": "Research Assistant",
-                        "dates": "2023-2024",
-                        "bullets": ["Detailed clean bullet without asterisks", "Detailed clean bullet"]
-                    }},
-                    {{
-                        "organization": "Global Peace Foundation",
-                        "location": "Nepal",
-                        "role": "Fellowship, Global Peacebuilders Leadership Program",
-                        "dates": "June 2023-February 2024",
-                        "bullets": ["Detailed clean bullet without asterisks", "Detailed clean bullet"]
-                    }},
-                    {{
-                        "organization": "Harihar Women Savings and Loan Cooperatives Limited",
-                        "location": "Pokhara, Nepal",
-                        "role": "Trainer",
-                        "dates": "April 29-May 5,2024",
-                        "bullets": ["Detailed clean bullet without asterisks", "Detailed clean bullet"]
+                        "vacancy_details": {{
+                            "job_title": "{target_role}",
+                            "organization": "{org_name}"
+                        }},
+                        "email_subject": "Application for {target_role} - Sudha Panthi",
+                        "email_body": "Formal Gmail body text with attached documents checklist and contact details...",
+                        "tailored_career_objective": "3-5 lines tailored to {target_role} without asterisks",
+                        "tailored_skills": {{
+                            "computer": "Microsoft Office, Adobe Photoshop, Adobe Illustrator, Arc-GIS, RStudio, GenStat, SPSS, Kobo Toolbox",
+                            "languages": "Nepali (Native), English (Fluent)",
+                            "targeted_technical_and_soft_skills": "6-8 prioritized competencies"
+                        }},
+                        "tailored_experience": [
+                            {{
+                                "organization": "Nepal Development Research Institute",
+                                "location": "Sanepa, Lalitpur",
+                                "role": "Field Researcher, MATSYA Project (Modernising Aquaculture in Nepal)",
+                                "dates": "February-May,2025",
+                                "bullets": ["Detailed clean bullet without asterisks", "Detailed clean bullet"]
+                            }},
+                            {{
+                                "organization": "National Agriculture Research Centre, Government of Nepal (Agronomy Division)",
+                                "location": "Khumaltar, Lalitpur",
+                                "role": "Research Assistant",
+                                "dates": "2023-2024",
+                                "bullets": ["Detailed clean bullet without asterisks", "Detailed clean bullet"]
+                            }},
+                            {{
+                                "organization": "Global Peace Foundation",
+                                "location": "Nepal",
+                                "role": "Fellowship, Global Peacebuilders Leadership Program",
+                                "dates": "June 2023-February 2024",
+                                "bullets": ["Detailed clean bullet without asterisks", "Detailed clean bullet"]
+                            }},
+                            {{
+                                "organization": "Harihar Women Savings and Loan Cooperatives Limited",
+                                "location": "Pokhara, Nepal",
+                                "role": "Trainer",
+                                "dates": "April 29-May 5,2024",
+                                "bullets": ["Detailed clean bullet without asterisks", "Detailed clean bullet"]
+                            }}
+                        ],
+                        "cover_letter": "{today_formatted}\\n\\nHiring Committee... (4 thorough paragraphs without any asterisks, ending with Sudha's phone +977-9860906707 and email)"
                     }}
-                ],
-                "cover_letter": "{today_formatted}\\n\\nHiring Committee... (4 thorough paragraphs without any asterisks, ending with Sudha's phone +977-9860906707 and email)"
-            }}
-            """
+                    """
 
-            if "Paste" in input_mode:
-                exec_model = text_model
-                exec_msgs = [
-                    {"role": "system", "content": full_prompt},
-                    {"role": "user", "content": f"VACANCY TEXT:\n{vacancy_text}"}
-                ]
-            else:
-                exec_model = vision_model
-                b64_img = base64.b64encode(uploaded_image_bytes).decode("utf-8")
-                exec_msgs = [
-                    {"role": "system", "content": full_prompt},
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": f"Tailor application for {target_role} in JSON:"},
-                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}}
+                    if "Paste" in input_mode:
+                        exec_model = text_model
+                        exec_msgs = [
+                            {"role": "system", "content": full_prompt},
+                            {"role": "user", "content": f"VACANCY TEXT:\n{vacancy_text}"}
                         ]
-                    }
-                ]
+                    else:
+                        exec_model = vision_model
+                        b64_img = base64.b64encode(uploaded_image_bytes).decode("utf-8")
+                        exec_msgs = [
+                            {"role": "system", "content": full_prompt},
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": f"Tailor application for {target_role} in JSON:"},
+                                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}}
+                                ]
+                            }
+                        ]
 
-            resp = client.chat.completions.create(
-                model=exec_model,
-                messages=exec_msgs,
-                response_format={"type": "json_object"},
-                temperature=0.2
-            )
-            data = json.loads(resp.choices[0].message.content.strip())
-
-            # Normalize types & ensure date
-            if isinstance(data.get("tailored_career_objective"), list):
-                data["tailored_career_objective"] = " ".join(str(x) for x in data["tailored_career_objective"])
-            if isinstance(data.get("cover_letter"), list):
-                data["cover_letter"] = "\n\n".join(str(x) for x in data["cover_letter"])
-            if isinstance(data.get("email_body"), list):
-                data["email_body"] = "\n\n".join(str(x) for x in data["email_body"])
-
-            # Post-process Cover Letter Date & replace placeholders
-            raw_cl = clean_text(data.get("cover_letter", ""))
-            raw_cl = re.sub(r'\[\s*Date\s*\]', today_formatted, raw_cl, flags=re.IGNORECASE)
-            if not raw_cl.startswith(today_formatted):
-                raw_cl = f"{today_formatted}\n\n" + raw_cl
-            data["cover_letter"] = raw_cl
-
-            skills_dict = data.get("tailored_skills", {})
-            for k in ["computer", "languages", "targeted_technical_and_soft_skills"]:
-                if isinstance(skills_dict.get(k), list):
-                    skills_dict[k] = ", ".join(str(x) for x in skills_dict[k])
-
-            avail_w = 210 - 16 - 16
-
-            # -------------------------------------------------------------
-            # BUILD FULL CV PDF (Calibri)
-            # -------------------------------------------------------------
-            cv_pdf = CompleteCVPDF(doc_type="CV")
-            cv_pdf.add_page()
-            cv_pdf.draw_cv_header()
-            
-            # 1. Career Objective
-            cv_pdf.draw_section_heading("Career Objective")
-            cv_pdf.set_x(cv_pdf.l_margin)
-            cv_pdf.set_font(cv_pdf.font_family, "", 9.2)
-            cv_pdf.set_text_color(30, 30, 30)
-            cv_pdf.multi_cell(avail_w, 4.4, clean_text(data.get("tailored_career_objective", "")), new_x="LMARGIN", new_y="NEXT")
-            cv_pdf.ln(1)
-
-            # 2. Experience
-            cv_pdf.draw_section_heading("Experience")
-            for org in data.get("tailored_experience", []):
-                raw_bullets = org.get("bullets", [])
-                if raw_bullets:
-                    cv_pdf.draw_org_block(
-                        org.get("organization", ""),
-                        org.get("location", ""),
-                        org.get("role", ""),
-                        org.get("dates", ""),
-                        [clean_text(b) for b in raw_bullets]
+                    resp = client.chat.completions.create(
+                        model=exec_model,
+                        messages=exec_msgs,
+                        response_format={"type": "json_object"},
+                        temperature=0.2
                     )
+                    data = json.loads(resp.choices[0].message.content.strip())
 
-            # 3. Publication (With Clickable Blue DOI Hyperlink)
-            cv_pdf.draw_section_heading("Publication")
-            cv_pdf.set_x(cv_pdf.l_margin)
-            cv_pdf.set_font(cv_pdf.font_family, "", 9)
-            cv_pdf.set_text_color(30, 30, 30)
-            cv_pdf.write(4.2, clean_text(PERMANENT_CV_SECTIONS["publication_text"]))
-            
-            cv_pdf.set_text_color(0, 80, 200)
-            doi_link = PERMANENT_CV_SECTIONS["publication_doi"]
-            cv_pdf.write(4.2, doi_link, link=doi_link)
-            cv_pdf.set_text_color(30, 30, 30)
-            cv_pdf.ln(5)
+                    # Normalize types & date
+                    if isinstance(data.get("tailored_career_objective"), list):
+                        data["tailored_career_objective"] = " ".join(str(x) for x in data["tailored_career_objective"])
+                    if isinstance(data.get("cover_letter"), list):
+                        data["cover_letter"] = "\n\n".join(str(x) for x in data["cover_letter"])
+                    if isinstance(data.get("email_body"), list):
+                        data["email_body"] = "\n\n".join(str(x) for x in data["email_body"])
 
-            # 4. Projects
-            cv_pdf.draw_section_heading("Projects")
-            cv_pdf.set_font(cv_pdf.font_family, "", 9)
-            for proj in PERMANENT_CV_SECTIONS["projects"]:
-                cv_pdf.set_x(cv_pdf.l_margin)
-                cv_pdf.multi_cell(avail_w, 4.2, f"-  {clean_text(proj)}", new_x="LMARGIN", new_y="NEXT")
-            cv_pdf.ln(1)
+                    raw_cl = clean_text(data.get("cover_letter", ""))
+                    raw_cl = re.sub(r'\[\s*Date\s*\]', today_formatted, raw_cl, flags=re.IGNORECASE)
+                    if not raw_cl.startswith(today_formatted):
+                        raw_cl = f"{today_formatted}\n\n" + raw_cl
+                    data["cover_letter"] = raw_cl
 
-            # 5. Education
-            cv_pdf.draw_section_heading("Education")
-            for edu in PERMANENT_CV_SECTIONS["education"]:
-                cv_pdf.draw_two_col_entry(edu["inst"], edu["deg"], edu["loc"], edu["yr"])
+                    skills_dict = data.get("tailored_skills", {})
+                    for k in ["computer", "languages", "targeted_technical_and_soft_skills"]:
+                        if isinstance(skills_dict.get(k), list):
+                            skills_dict[k] = ", ".join(str(x) for x in skills_dict[k])
 
-            # 6. Leadership Activities
-            cv_pdf.draw_section_heading("Leadership Activities")
-            for lead in PERMANENT_CV_SECTIONS["leadership"]:
-                cv_pdf.set_x(cv_pdf.l_margin)
-                cv_pdf.set_font(cv_pdf.font_family, "B", 9.4)
-                cv_pdf.cell(115, 4.5, clean_text(lead["org"]), align="L")
-                cv_pdf.set_font(cv_pdf.font_family, "", 9)
-                cv_pdf.cell(avail_w - 115, 4.5, clean_text(lead["loc"]), align="R", new_x="LMARGIN", new_y="NEXT")
-                for r_title, r_desc in lead["roles"]:
+                    avail_w = 210 - 16 - 16
+
+                    # ---------------------------------------------------------
+                    # BUILD FULL CV PDF
+                    # ---------------------------------------------------------
+                    cv_pdf = CompleteCVPDF(doc_type="CV")
+                    cv_pdf.add_page()
+                    cv_pdf.draw_cv_header()
+                    
+                    # 1. Career Objective
+                    cv_pdf.draw_section_heading("Career Objective")
                     cv_pdf.set_x(cv_pdf.l_margin)
-                    cv_pdf.set_font(cv_pdf.font_family, "I", 9)
-                    cv_pdf.cell(avail_w, 4.0, clean_text(r_title), new_x="LMARGIN", new_y="NEXT")
+                    cv_pdf.set_font(cv_pdf.font_family, "", 9.2)
+                    cv_pdf.set_text_color(30, 30, 30)
+                    cv_pdf.multi_cell(avail_w, 4.4, clean_text(data.get("tailored_career_objective", "")), new_x="LMARGIN", new_y="NEXT")
+                    cv_pdf.ln(1)
+
+                    # 2. Experience
+                    cv_pdf.draw_section_heading("Experience")
+                    for org in data.get("tailored_experience", []):
+                        raw_bullets = org.get("bullets", [])
+                        if raw_bullets:
+                            cv_pdf.draw_org_block(
+                                org.get("organization", ""),
+                                org.get("location", ""),
+                                org.get("role", ""),
+                                org.get("dates", ""),
+                                [clean_text(b) for b in raw_bullets]
+                            )
+
+                    # 3. Publication
+                    cv_pdf.draw_section_heading("Publication")
                     cv_pdf.set_x(cv_pdf.l_margin)
-                    cv_pdf.set_font(cv_pdf.font_family, "", 8.8)
-                    cv_pdf.multi_cell(avail_w, 4.0, f"  {clean_text(r_desc)}", new_x="LMARGIN", new_y="NEXT")
-                cv_pdf.ln(1)
+                    cv_pdf.set_font(cv_pdf.font_family, "", 9)
+                    cv_pdf.set_text_color(30, 30, 30)
+                    cv_pdf.write(4.2, clean_text(PERMANENT_CV_SECTIONS["publication_text"]))
+                    
+                    cv_pdf.set_text_color(0, 80, 200)
+                    doi_link = PERMANENT_CV_SECTIONS["publication_doi"]
+                    cv_pdf.write(4.2, doi_link, link=doi_link)
+                    cv_pdf.set_text_color(30, 30, 30)
+                    cv_pdf.ln(5)
 
-            # 7. Trainings and Workshops
-            cv_pdf.draw_section_heading("Trainings and Workshops")
-            for tr_title, tr_org in PERMANENT_CV_SECTIONS["trainings"]:
-                cv_pdf.draw_two_col_entry(tr_title, "", tr_org, "")
+                    # 4. Projects
+                    cv_pdf.draw_section_heading("Projects")
+                    cv_pdf.set_font(cv_pdf.font_family, "", 9)
+                    for proj in PERMANENT_CV_SECTIONS["projects"]:
+                        cv_pdf.set_x(cv_pdf.l_margin)
+                        cv_pdf.multi_cell(avail_w, 4.2, f"-  {clean_text(proj)}", new_x="LMARGIN", new_y="NEXT")
+                    cv_pdf.ln(1)
 
-            # 8. Volunteering
-            cv_pdf.draw_section_heading("Volunteering")
-            for vol_title, vol_org in PERMANENT_CV_SECTIONS["volunteering"]:
-                cv_pdf.draw_two_col_entry(vol_title, "", vol_org, "")
+                    # 5. Education
+                    cv_pdf.draw_section_heading("Education")
+                    for edu in PERMANENT_CV_SECTIONS["education"]:
+                        cv_pdf.draw_two_col_entry(edu["inst"], edu["deg"], edu["loc"], edu["yr"])
 
-            # 9. Skills
-            cv_pdf.draw_section_heading("Skills")
-            cv_pdf.set_x(cv_pdf.l_margin)
-            cv_pdf.set_font(cv_pdf.font_family, "B", 9)
-            cv_pdf.write(4.2, "Computer: ")
-            cv_pdf.set_font(cv_pdf.font_family, "", 9)
-            cv_pdf.write(4.2, f"{clean_text(skills_dict.get('computer', ''))}\n")
-            cv_pdf.ln(1)
+                    # 6. Leadership Activities
+                    cv_pdf.draw_section_heading("Leadership Activities")
+                    for lead in PERMANENT_CV_SECTIONS["leadership"]:
+                        cv_pdf.set_x(cv_pdf.l_margin)
+                        cv_pdf.set_font(cv_pdf.font_family, "B", 9.4)
+                        cv_pdf.cell(115, 4.5, clean_text(lead["org"]), align="L")
+                        cv_pdf.set_font("Helvetica", "", 9)
+                        cv_pdf.cell(avail_w - 115, 4.5, clean_text(lead["loc"]), align="R", new_x="LMARGIN", new_y="NEXT")
+                        for r_title, r_desc in lead["roles"]:
+                            cv_pdf.set_x(cv_pdf.l_margin)
+                            cv_pdf.set_font("Helvetica", "I", 9)
+                            cv_pdf.cell(avail_w, 4.0, clean_text(r_title), new_x="LMARGIN", new_y="NEXT")
+                            cv_pdf.set_x(cv_pdf.l_margin)
+                            cv_pdf.set_font("Helvetica", "", 8.8)
+                            cv_pdf.multi_cell(avail_w, 4.0, f"  {clean_text(r_desc)}", new_x="LMARGIN", new_y="NEXT")
+                        cv_pdf.ln(1)
 
-            cv_pdf.set_x(cv_pdf.l_margin)
-            cv_pdf.set_font(cv_pdf.font_family, "B", 9)
-            cv_pdf.write(4.2, "Language: ")
-            cv_pdf.set_font(cv_pdf.font_family, "", 9)
-            cv_pdf.write(4.2, f"{clean_text(skills_dict.get('languages', ''))}\n")
-            cv_pdf.ln(1)
+                    # 7. Trainings and Workshops
+                    cv_pdf.draw_section_heading("Trainings and Workshops")
+                    for tr_title, tr_org in PERMANENT_CV_SECTIONS["trainings"]:
+                        cv_pdf.draw_two_col_entry(tr_title, "", tr_org, "")
 
-            cv_pdf.set_x(cv_pdf.l_margin)
-            cv_pdf.set_font(cv_pdf.font_family, "B", 9)
-            cv_pdf.write(4.2, "Vacancy Skills: ")
-            cv_pdf.set_font(cv_pdf.font_family, "", 9)
-            cv_pdf.write(4.2, f"{clean_text(skills_dict.get('targeted_technical_and_soft_skills', ''))}\n")
-            cv_pdf.ln(1)
+                    # 8. Volunteering
+                    cv_pdf.draw_section_heading("Volunteering")
+                    for vol_title, vol_org in PERMANENT_CV_SECTIONS["volunteering"]:
+                        cv_pdf.draw_two_col_entry(vol_title, "", vol_org, "")
 
-            # 10. Referees (Bhimsen Chaulagain's phone: 9860679982)
-            cv_pdf.draw_section_heading("Referees")
-            for ref in PERMANENT_CV_SECTIONS["referees"]:
-                cv_pdf.set_x(cv_pdf.l_margin)
-                cv_pdf.set_font(cv_pdf.font_family, "B", 9.2)
-                cv_pdf.cell(70, 4, clean_text(ref["name"]), align="L")
-                cv_pdf.set_font(cv_pdf.font_family, "", 9)
-                cv_pdf.cell(avail_w - 70, 4, f"{clean_text(ref['phone'])} | {clean_text(ref['email'])}", align="R", new_x="LMARGIN", new_y="NEXT")
-                cv_pdf.set_x(cv_pdf.l_margin)
-                cv_pdf.set_font(cv_pdf.font_family, "I", 8.8)
-                cv_pdf.cell(avail_w, 3.8, clean_text(ref["title"]), new_x="LMARGIN", new_y="NEXT")
-                cv_pdf.ln(1.5)
+                    # 9. Skills
+                    cv_pdf.draw_section_heading("Skills")
+                    cv_pdf.set_x(cv_pdf.l_margin)
+                    cv_pdf.set_font(cv_pdf.font_family, "B", 9)
+                    cv_pdf.write(4.2, "Computer: ")
+                    cv_pdf.set_font(cv_pdf.font_family, "", 9)
+                    cv_pdf.write(4.2, f"{clean_text(skills_dict.get('computer', ''))}\n")
+                    cv_pdf.ln(1)
 
-            cv_buf = io.BytesIO()
-            cv_pdf.output(cv_buf)
-            
-            # -------------------------------------------------------------
-            # BUILD COVER LETTER PDF (Clean - No Asterisks)
-            # -------------------------------------------------------------
-            cl_pdf = CompleteCVPDF(doc_type="Cover Letter")
-            cl_pdf.add_page()
-            cl_pdf.draw_cv_header()
-            cl_pdf.draw_section_heading(f"Application for {target_role}")
-            
-            cl_pdf.set_x(cl_pdf.l_margin)
-            cl_pdf.set_font(cl_pdf.font_family, "", 9.8)
-            cl_pdf.set_text_color(30, 30, 30)
-            cl_pdf.multi_cell(avail_w, 4.8, clean_text(data.get("cover_letter", "")), new_x="LMARGIN", new_y="NEXT")
-            
-            cl_buf = io.BytesIO()
-            cl_pdf.output(cl_buf)
+                    cv_pdf.set_x(cv_pdf.l_margin)
+                    cv_pdf.set_font(cv_pdf.font_family, "B", 9)
+                    cv_pdf.write(4.2, "Language: ")
+                    cv_pdf.set_font(cv_pdf.font_family, "", 9)
+                    cv_pdf.write(4.2, f"{clean_text(skills_dict.get('languages', ''))}\n")
+                    cv_pdf.ln(1)
 
-            # Store into Streamlit Session State
-            st.session_state.generated_app_data = data
-            st.session_state.cv_pdf_bytes = cv_buf.getvalue()
-            st.session_state.cl_pdf_bytes = cl_buf.getvalue()
+                    cv_pdf.set_x(cv_pdf.l_margin)
+                    cv_pdf.set_font(cv_pdf.font_family, "B", 9)
+                    cv_pdf.write(4.2, "Vacancy Skills: ")
+                    cv_pdf.set_font(cv_pdf.font_family, "", 9)
+                    cv_pdf.write(4.2, f"{clean_text(skills_dict.get('targeted_technical_and_soft_skills', ''))}\n")
+                    cv_pdf.ln(1)
 
-        except Exception as e:
-            st.error(f"Generation error: {e}")
+                    # 10. Referees (Bhimsen Chaulagain's phone: 9860679982)
+                    cv_pdf.draw_section_heading("Referees")
+                    for ref in PERMANENT_CV_SECTIONS["referees"]:
+                        cv_pdf.set_x(cv_pdf.l_margin)
+                        cv_pdf.set_font(cv_pdf.font_family, "B", 9.2)
+                        cv_pdf.cell(70, 4, clean_text(ref["name"]), align="L")
+                        cv_pdf.set_font(cv_pdf.font_family, "", 9)
+                        cv_pdf.cell(avail_w - 70, 4, f"{clean_text(ref['phone'])} | {clean_text(ref['email'])}", align="R", new_x="LMARGIN", new_y="NEXT")
+                        cv_pdf.set_x(cv_pdf.l_margin)
+                        cv_pdf.set_font(cv_pdf.font_family, "I", 8.8)
+                        cv_pdf.cell(avail_w, 3.8, clean_text(ref["title"]), new_x="LMARGIN", new_y="NEXT")
+                        cv_pdf.ln(1.5)
+
+                    cv_buf = io.BytesIO()
+                    cv_pdf.output(cv_buf)
+                    
+                    # ---------------------------------------------------------
+                    # BUILD COVER LETTER PDF
+                    # ---------------------------------------------------------
+                    cl_pdf = CompleteCVPDF(doc_type="Cover Letter")
+                    cl_pdf.add_page()
+                    cl_pdf.draw_cv_header()
+                    cl_pdf.draw_section_heading(f"Application for {target_role}")
+                    
+                    cl_pdf.set_x(cl_pdf.l_margin)
+                    cl_pdf.set_font(cl_pdf.font_family, "", 9.8)
+                    cl_pdf.set_text_color(30, 30, 30)
+                    cl_pdf.multi_cell(avail_w, 4.8, clean_text(data.get("cover_letter", "")), new_x="LMARGIN", new_y="NEXT")
+                    
+                    cl_buf = io.BytesIO()
+                    cl_pdf.output(cl_buf)
+
+                    # Store state for persistent downloads
+                    st.session_state.generated_app_data = data
+                    st.session_state.cv_pdf_bytes = cv_buf.getvalue()
+                    st.session_state.cl_pdf_bytes = cl_buf.getvalue()
+
+                except Exception as e:
+                    st.error(f"Generation error: {e}")
 
 # -------------------------------------------------------------------------
-# 7. Render Results from Session State
+# STAGE 4: DISPLAY CV, COVER LETTER, AND EMAIL WITH DOWNLOAD BUTTONS AT THE END
 # -------------------------------------------------------------------------
 if st.session_state.generated_app_data is not None:
     data = st.session_state.generated_app_data
-    current_target = st.session_state.target_position
+    current_target = st.session_state.selected_position
 
     st.markdown("---")
     st.success(f"Application ready for: **{current_target}**")
@@ -738,6 +721,8 @@ if st.session_state.generated_app_data is not None:
                 for b in org.get("bullets", []):
                     st.write(f"- {clean_text(b)}")
 
+        # Download button placed at the end of the CV tab
+        st.write("")
         st.download_button(
             label="📥 Download CV (PDF)",
             data=st.session_state.cv_pdf_bytes,
@@ -750,6 +735,8 @@ if st.session_state.generated_app_data is not None:
         st.subheader("Cover Letter")
         st.text_area("Cover Letter Preview:", value=clean_text(data.get("cover_letter", "")), height=400, key="cl_preview_area")
         
+        # Download button placed at the end of the Cover Letter tab
+        st.write("")
         st.download_button(
             label="📥 Download Cover Letter (PDF)",
             data=st.session_state.cl_pdf_bytes,
