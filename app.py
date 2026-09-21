@@ -7,7 +7,7 @@ import base64
 import io
 
 # -------------------------------------------------------------------------
-# 1. Styled PDF Builder (Replicating Sudha's Exact 3-Page CV Layout)
+# 1. Robust PDF Builder (Fixed Margin & Bounded Horizontal Space)
 # -------------------------------------------------------------------------
 class CompleteCVPDF(FPDF):
     def __init__(self, doc_type="CV"):
@@ -16,29 +16,37 @@ class CompleteCVPDF(FPDF):
         self.set_margins(16, 14, 16)
         self.set_auto_page_break(auto=True, margin=15)
 
+    @property
+    def printable_width(self):
+        return self.w - self.l_margin - self.r_margin
+
     def draw_cv_header(self):
         """Header matching Page 1 of Sudha's CV"""
+        avail_w = self.printable_width
+        self.set_y(14)
+        self.set_x(self.l_margin)
+        
+        # Name on Left
         self.set_font("Helvetica", "B", 18)
         self.set_text_color(20, 20, 20)
-        self.cell(100, 8, "SUDHA PANTHI", ln=False)
+        self.cell(90, 10, "SUDHA PANTHI", align="L")
         
-        self.set_font("Helvetica", "", 9)
+        # Contact Details on Right
+        self.set_font("Helvetica", "", 8.5)
         self.set_text_color(60, 60, 60)
-        contact_x = 120
-        self.set_x(contact_x)
-        self.cell(0, 4, "+977-9860906707", ln=True, align="R")
-        self.set_x(contact_x)
-        self.cell(0, 4, "Sudha.panthee@gmail.com", ln=True, align="R")
-        self.set_x(contact_x)
-        self.cell(0, 4, "linkedin.com/in/sudha-panthi-10aa801b0", ln=True, align="R")
-        self.ln(4)
+        self.set_x(self.w - self.r_margin - 85)
+        contact_info = "+977-9860906707\nSudha.panthee@gmail.com\nlinkedin.com/in/sudha-panthi-10aa801b0"
+        self.multi_cell(85, 3.8, contact_info, align="R", new_x="LMARGIN", new_y="NEXT")
+        self.ln(3)
 
     def draw_section_heading(self, title):
         """Heading with horizontal divider line"""
-        self.ln(2.5)
-        self.set_font("Helvetica", "B", 11.5)
+        avail_w = self.printable_width
+        self.ln(2)
+        self.set_x(self.l_margin)
+        self.set_font("Helvetica", "B", 11)
         self.set_text_color(15, 15, 15)
-        self.cell(0, 5, title, ln=True)
+        self.cell(avail_w, 5, title, new_x="LMARGIN", new_y="NEXT")
         
         curr_y = self.get_y()
         self.set_draw_color(40, 40, 40)
@@ -47,53 +55,69 @@ class CompleteCVPDF(FPDF):
         self.ln(2.5)
 
     def draw_org_block(self, org_name, location, role_title, dates, bullets):
-        """Organization Block (Org/Location + Role/Dates + Hyphen Bullets)"""
-        self.set_font("Helvetica", "B", 10)
-        self.set_text_color(20, 20, 20)
-        self.cell(115, 4.5, org_name, ln=False)
-        self.set_font("Helvetica", "", 9)
-        self.cell(0, 4.5, location, ln=True, align="R")
+        """Organization Block with explicit width bounding"""
+        avail_w = self.printable_width
+        col_left = 115
+        col_right = avail_w - col_left
 
-        self.set_font("Helvetica", "I", 9)
-        self.cell(115, 4.5, role_title, ln=False)
+        # Line 1: Organization & Location
+        self.set_x(self.l_margin)
+        self.set_font("Helvetica", "B", 9.8)
+        self.set_text_color(20, 20, 20)
+        self.cell(col_left, 4.5, org_name, align="L")
         self.set_font("Helvetica", "", 9)
-        self.cell(0, 4.5, dates, ln=True, align="R")
+        self.cell(col_right, 4.5, location, align="R", new_x="LMARGIN", new_y="NEXT")
+
+        # Line 2: Role & Dates
+        self.set_x(self.l_margin)
+        self.set_font("Helvetica", "I", 9)
+        self.cell(col_left, 4.2, role_title, align="L")
+        self.set_font("Helvetica", "", 9)
+        self.cell(col_right, 4.2, dates, align="R", new_x="LMARGIN", new_y="NEXT")
         self.ln(0.8)
 
+        # Bullets
         self.set_font("Helvetica", "", 8.8)
         self.set_text_color(35, 35, 35)
         for bullet in bullets:
             self.set_x(self.l_margin)
-            self.cell(4, 4.2, "-", ln=False)
-            self.multi_cell(0, 4.2, f" {bullet}")
-        self.ln(1.8)
+            self.multi_cell(avail_w, 4.2, f"-  {bullet}", new_x="LMARGIN", new_y="NEXT")
+        self.ln(1.5)
 
     def draw_two_col_entry(self, left_bold, left_sub, right_txt, right_sub=""):
         """Two-column layout for Education, Leadership, Workshops, etc."""
-        self.set_font("Helvetica", "B", 9.5)
+        avail_w = self.printable_width
+        col_left = 118
+        col_right = avail_w - col_left
+
+        self.set_x(self.l_margin)
+        self.set_font("Helvetica", "B", 9)
         self.set_text_color(20, 20, 20)
-        self.cell(120, 4.2, left_bold, ln=False)
-        self.set_font("Helvetica", "", 9)
-        self.cell(0, 4.2, right_txt, ln=True, align="R")
+        self.cell(col_left, 4.2, left_bold, align="L")
+        self.set_font("Helvetica", "", 8.8)
+        self.cell(col_right, 4.2, right_txt, align="R", new_x="LMARGIN", new_y="NEXT")
 
         if left_sub or right_sub:
-            self.set_font("Helvetica", "", 8.8)
+            self.set_x(self.l_margin)
+            self.set_font("Helvetica", "", 8.5)
             self.set_text_color(50, 50, 50)
-            self.cell(120, 4.2, left_sub, ln=False)
-            self.cell(0, 4.2, right_sub, ln=True, align="R")
+            self.cell(col_left, 4.0, left_sub, align="L")
+            self.cell(col_right, 4.0, right_sub, align="R", new_x="LMARGIN", new_y="NEXT")
         self.ln(1)
 
     def footer(self):
-        """Page Footer: Sudha Panthi - Email: ... | X | P a g e"""
+        """Page Footer"""
         self.set_y(-12)
+        self.set_x(self.l_margin)
         self.set_font("Helvetica", "", 8.5)
         self.set_text_color(90, 90, 90)
-        self.cell(100, 8, "Sudha Panthi - Email: Sudha.panthee@gmail.com", ln=False, align="L")
-        self.cell(0, 8, f"{self.page_no()} | P a g e", ln=False, align="R")
+        avail_w = self.printable_width
+        self.cell(avail_w / 2, 8, "Sudha Panthi - Email: Sudha.panthee@gmail.com", align="L")
+        self.cell(avail_w / 2, 8, f"{self.page_no()} | P a g e", align="R")
 
 
 def clean_text(txt):
-    """Sanitizes unicode to Latin-1 compatible characters for standard PDF fonts"""
+    """Sanitizes text to safe ASCII characters"""
     if not txt:
         return ""
     replacements = {
@@ -109,11 +133,10 @@ def clean_text(txt):
 # 2. Dynamic Model Selector (Prevents Groq 404 Deprecation Errors)
 # -------------------------------------------------------------------------
 def get_groq_active_models(client):
-    """Dynamically queries Groq API for currently active models on your account"""
+    """Dynamically queries Groq API for currently active models"""
     try:
         available_models = [m.id for m in client.models.list().data]
         
-        # Priority preferences for text processing
         preferred_text = [
             "openai/gpt-oss-120b",
             "openai/gpt-oss-20b",
@@ -125,7 +148,6 @@ def get_groq_active_models(client):
         if not text_model:
             text_model = available_models[0] if available_models else "openai/gpt-oss-120b"
             
-        # Priority preferences for vision/image processing
         preferred_vision = [
             "llama-3.2-11b-vision-preview",
             "llama-3.2-90b-vision-preview",
@@ -251,11 +273,10 @@ with col_btn:
         if not api_key:
             st.warning("Please provide your Groq API key to proceed.")
         else:
-            with st.spinner("Discovering active Groq models & tailoring application..."):
+            with st.spinner("Analyzing vacancy details & generating application..."):
                 try:
                     client = Groq(api_key=api_key)
                     
-                    # Auto-detect currently active models on Groq
                     text_model, vision_model = get_groq_active_models(client)
 
                     system_prompt = """
@@ -347,6 +368,8 @@ with col_btn:
                     raw_json = response.choices[0].message.content.strip()
                     data = json.loads(raw_json)
 
+                    avail_w = 210 - 16 - 16  # standard printable width
+
                     # -------------------------------------------------------------
                     # BUILD FULL CV PDF (All Sections Included)
                     # -------------------------------------------------------------
@@ -356,9 +379,10 @@ with col_btn:
                     
                     # 1. Career Objective
                     cv_pdf.draw_section_heading("Career Objective")
+                    cv_pdf.set_x(cv_pdf.l_margin)
                     cv_pdf.set_font("Helvetica", "", 9)
                     cv_pdf.set_text_color(30, 30, 30)
-                    cv_pdf.multi_cell(0, 4.3, clean_text(data["tailored_career_objective"]))
+                    cv_pdf.multi_cell(avail_w, 4.3, clean_text(data["tailored_career_objective"]), new_x="LMARGIN", new_y="NEXT")
                     cv_pdf.ln(1)
 
                     # 2. Experience
@@ -375,16 +399,17 @@ with col_btn:
 
                     # 3. Publication
                     cv_pdf.draw_section_heading("Publication")
+                    cv_pdf.set_x(cv_pdf.l_margin)
                     cv_pdf.set_font("Helvetica", "", 8.8)
-                    cv_pdf.multi_cell(0, 4.2, clean_text(PERMANENT_CV_SECTIONS["publication"]))
+                    cv_pdf.multi_cell(avail_w, 4.2, clean_text(PERMANENT_CV_SECTIONS["publication"]), new_x="LMARGIN", new_y="NEXT")
                     cv_pdf.ln(1)
 
                     # 4. Projects
                     cv_pdf.draw_section_heading("Projects")
                     cv_pdf.set_font("Helvetica", "", 8.8)
                     for proj in PERMANENT_CV_SECTIONS["projects"]:
-                        cv_pdf.cell(4, 4.2, "-", ln=False)
-                        cv_pdf.multi_cell(0, 4.2, f" {clean_text(proj)}")
+                        cv_pdf.set_x(cv_pdf.l_margin)
+                        cv_pdf.multi_cell(avail_w, 4.2, f"-  {clean_text(proj)}", new_x="LMARGIN", new_y="NEXT")
                     cv_pdf.ln(1)
 
                     # 5. Education
@@ -400,15 +425,19 @@ with col_btn:
                     # 6. Leadership Activities
                     cv_pdf.draw_section_heading("Leadership Activities")
                     for lead in PERMANENT_CV_SECTIONS["leadership"]:
-                        cv_pdf.set_font("Helvetica", "B", 9.5)
-                        cv_pdf.cell(120, 4.5, clean_text(lead["org"]), ln=False)
-                        cv_pdf.set_font("Helvetica", "", 9)
-                        cv_pdf.cell(0, 4.5, clean_text(lead["loc"]), ln=True, align="R")
+                        cv_pdf.set_x(cv_pdf.l_margin)
+                        cv_pdf.set_font("Helvetica", "B", 9.2)
+                        cv_pdf.cell(115, 4.5, clean_text(lead["org"]), align="L")
+                        cv_pdf.set_font("Helvetica", "", 8.8)
+                        cv_pdf.cell(avail_w - 115, 4.5, clean_text(lead["loc"]), align="R", new_x="LMARGIN", new_y="NEXT")
+                        
                         for r_title, r_desc in lead["roles"]:
+                            cv_pdf.set_x(cv_pdf.l_margin)
                             cv_pdf.set_font("Helvetica", "I", 8.8)
-                            cv_pdf.cell(0, 4, clean_text(r_title), ln=True)
+                            cv_pdf.cell(avail_w, 4.0, clean_text(r_title), new_x="LMARGIN", new_y="NEXT")
+                            cv_pdf.set_x(cv_pdf.l_margin)
                             cv_pdf.set_font("Helvetica", "", 8.6)
-                            cv_pdf.multi_cell(0, 4, f"  {clean_text(r_desc)}")
+                            cv_pdf.multi_cell(avail_w, 4.0, f"  {clean_text(r_desc)}", new_x="LMARGIN", new_y="NEXT")
                         cv_pdf.ln(1)
 
                     # 7. Trainings and Workshops
@@ -421,33 +450,42 @@ with col_btn:
                     for vol_title, vol_org in PERMANENT_CV_SECTIONS["volunteering"]:
                         cv_pdf.draw_two_col_entry(clean_text(vol_title), "", clean_text(vol_org), "")
 
-                    # 9. Skills
+                    # 9. Skills (Safe Inline Flow)
                     cv_pdf.draw_section_heading("Skills")
+                    skills_dict = data.get("tailored_skills", {})
+                    
+                    cv_pdf.set_x(cv_pdf.l_margin)
                     cv_pdf.set_font("Helvetica", "B", 8.8)
-                    cv_pdf.cell(28, 4.2, "Computer:", ln=False)
+                    cv_pdf.write(4.2, "Computer: ")
                     cv_pdf.set_font("Helvetica", "", 8.8)
-                    cv_pdf.multi_cell(0, 4.2, clean_text(data["tailored_skills"]["computer"]))
+                    cv_pdf.write(4.2, f"{clean_text(skills_dict.get('computer', ''))}\n")
+                    cv_pdf.ln(1)
 
+                    cv_pdf.set_x(cv_pdf.l_margin)
                     cv_pdf.set_font("Helvetica", "B", 8.8)
-                    cv_pdf.cell(28, 4.2, "Language:", ln=False)
+                    cv_pdf.write(4.2, "Language: ")
                     cv_pdf.set_font("Helvetica", "", 8.8)
-                    cv_pdf.multi_cell(0, 4.2, clean_text(data["tailored_skills"]["languages"]))
+                    cv_pdf.write(4.2, f"{clean_text(skills_dict.get('languages', ''))}\n")
+                    cv_pdf.ln(1)
 
+                    cv_pdf.set_x(cv_pdf.l_margin)
                     cv_pdf.set_font("Helvetica", "B", 8.8)
-                    cv_pdf.cell(28, 4.2, "Vacancy Skills:", ln=False)
+                    cv_pdf.write(4.2, "Vacancy Skills: ")
                     cv_pdf.set_font("Helvetica", "", 8.8)
-                    cv_pdf.multi_cell(0, 4.2, clean_text(data["tailored_skills"]["targeted_technical_and_soft_skills"]))
+                    cv_pdf.write(4.2, f"{clean_text(skills_dict.get('targeted_technical_and_soft_skills', ''))}\n")
                     cv_pdf.ln(1)
 
                     # 10. Referees
                     cv_pdf.draw_section_heading("Referees")
                     for ref in PERMANENT_CV_SECTIONS["referees"]:
+                        cv_pdf.set_x(cv_pdf.l_margin)
                         cv_pdf.set_font("Helvetica", "B", 9)
-                        cv_pdf.cell(70, 4, clean_text(ref["name"]), ln=False)
+                        cv_pdf.cell(70, 4, clean_text(ref["name"]), align="L")
                         cv_pdf.set_font("Helvetica", "", 8.8)
-                        cv_pdf.cell(0, 4, f"{clean_text(ref['phone'])} | {clean_text(ref['email'])}", ln=True)
+                        cv_pdf.cell(avail_w - 70, 4, f"{clean_text(ref['phone'])} | {clean_text(ref['email'])}", align="R", new_x="LMARGIN", new_y="NEXT")
+                        cv_pdf.set_x(cv_pdf.l_margin)
                         cv_pdf.set_font("Helvetica", "I", 8.5)
-                        cv_pdf.cell(0, 3.8, clean_text(ref["title"]), ln=True)
+                        cv_pdf.cell(avail_w, 3.8, clean_text(ref["title"]), new_x="LMARGIN", new_y="NEXT")
                         cv_pdf.ln(1.5)
 
                     cv_buf = io.BytesIO()
@@ -461,9 +499,10 @@ with col_btn:
                     cl_pdf.add_page()
                     cl_pdf.draw_cv_header()
                     cl_pdf.draw_section_heading(f"Application for {clean_text(data['vacancy_details']['job_title'])}")
+                    cl_pdf.set_x(cl_pdf.l_margin)
                     cl_pdf.set_font("Helvetica", "", 9.5)
                     cl_pdf.set_text_color(30, 30, 30)
-                    cl_pdf.multi_cell(0, 4.8, clean_text(data["cover_letter"]))
+                    cl_pdf.multi_cell(avail_w, 4.8, clean_text(data["cover_letter"]), new_x="LMARGIN", new_y="NEXT")
                     
                     cl_buf = io.BytesIO()
                     cl_pdf.output(cl_buf)
@@ -487,10 +526,10 @@ with col_btn:
                         st.markdown("### 2. Vacancy-Targeted Skills")
                         col_s1, col_s2 = st.columns(2)
                         with col_s1:
-                            st.write(f"**Software / Tools:** {data['tailored_skills']['computer']}")
-                            st.write(f"**Languages:** {data['tailored_skills']['languages']}")
+                            st.write(f"**Software / Tools:** {skills_dict.get('computer', '')}")
+                            st.write(f"**Languages:** {skills_dict.get('languages', '')}")
                         with col_s2:
-                            st.write(f"**Prioritized Competencies:** {data['tailored_skills']['targeted_technical_and_soft_skills']}")
+                            st.write(f"**Prioritized Competencies:** {skills_dict.get('targeted_technical_and_soft_skills', '')}")
 
                         st.markdown("### 3. Tailored Experience Bullets (By Organization)")
                         for org in data["tailored_experience"]:
