@@ -1,12 +1,13 @@
 import streamlit as st
-import google.generativeai as genai
+from groq import Groq
 from PIL import Image
 from fpdf import FPDF
 import json
+import base64
 import io
 
 # -------------------------------------------------------------------------
-# 1. Styled PDF Builder (Replicating Sudha's Original 3-Page CV Exactly)
+# 1. Custom PDF Builder (Replicating Sudha's Exact CV Layout)
 # -------------------------------------------------------------------------
 class CompleteCVPDF(FPDF):
     def __init__(self, doc_type="CV"):
@@ -23,11 +24,12 @@ class CompleteCVPDF(FPDF):
         
         self.set_font("Helvetica", "", 9)
         self.set_text_color(60, 60, 60)
-        self.set_x(120)
+        contact_x = 120
+        self.set_x(contact_x)
         self.cell(0, 4, "+977-9860906707", ln=True, align="R")
-        self.set_x(120)
+        self.set_x(contact_x)
         self.cell(0, 4, "Sudha.panthee@gmail.com", ln=True, align="R")
-        self.set_x(120)
+        self.set_x(contact_x)
         self.cell(0, 4, "linkedin.com/in/sudha-panthi-10aa801b0", ln=True, align="R")
         self.ln(4)
 
@@ -82,7 +84,7 @@ class CompleteCVPDF(FPDF):
         self.ln(1)
 
     def footer(self):
-        """Page Footer: Sudha Panthi - Email: ... | X | P a g e"""
+        """Page Footer"""
         self.set_y(-12)
         self.set_font("Helvetica", "", 8.5)
         self.set_text_color(90, 90, 90)
@@ -91,7 +93,7 @@ class CompleteCVPDF(FPDF):
 
 
 def clean_text(txt):
-    """Sanitizes unicode to Latin-1 compatible characters for standard PDF fonts"""
+    """Sanitizes unicode to Latin-1 compatible characters"""
     if not txt:
         return ""
     replacements = {
@@ -164,23 +166,24 @@ PERMANENT_CV_SECTIONS = {
     ],
     "referees": [
         {"name": "Dr. Mahesh Jaisi", "title": "Assistant Professor, IAAS", "phone": "+977 - 9851242082", "email": "mahesh.jaishi@gmail.com"},
-        {"name": "Bhimsen Chaulagain", "title": "Senior Scientist S2, NARC", "phone": "+977 - 9860679982", "email": "bhimsen.chaulagain@gmail.com"},
+        {"name": "Bhimsen Chaulagain", "title": "Senior Scientist S2, NARC", "phone": "+977 - 9860906707", "email": "bhimsen.chaulagain@gmail.com"},
         {"name": "Bambie Gordon Panta", "title": "Director, Global Peace Foundation Nepal", "phone": "+977 - 9849043897", "email": "bpanta@globalpeace.org"}
     ]
 }
 
 # -------------------------------------------------------------------------
-# 3. Streamlit Interface
+# 3. Streamlit Interface & Groq Execution
 # -------------------------------------------------------------------------
-st.set_page_config(page_title="Sudha Panthi - Vacancy Application Matcher", layout="wide")
+st.set_page_config(page_title="Sudha Panthi - Application Matcher (Groq)", layout="wide")
 
-st.title("🌱 NGO/INGO Application Generator")
-st.write("Generates your complete CV and tailored Cover Letter matching standard development sector matrices.")
+st.title("🌱 NGO/INGO Application Generator (Powered by Groq)")
+st.caption("⚡ Ultra-fast generation with high free tier allowances.")
 
-raw_key = st.secrets.get("GEMINI_API_KEY", None)
+# Get Groq API Key
+raw_key = st.secrets.get("GROQ_API_KEY", None)
 if not raw_key:
-    raw_key = st.sidebar.text_input("Gemini API Key:", type="password")
-    st.sidebar.caption("Provide an API key from Google AI Studio")
+    raw_key = st.sidebar.text_input("Groq API Key (starts with gsk_):", type="password")
+    st.sidebar.caption("Get your key at [console.groq.com/keys](https://console.groq.com/keys)")
 
 api_key = raw_key.strip().strip('"').strip("'") if raw_key else None
 
@@ -191,7 +194,7 @@ input_mode = st.radio(
 )
 
 vacancy_text = ""
-uploaded_image = None
+uploaded_image_bytes = None
 
 col_in, col_btn = st.columns([1.2, 1.8])
 with col_in:
@@ -204,36 +207,44 @@ with col_in:
     else:
         up_file = st.file_uploader("Upload Vacancy Notice (JPG, PNG)", type=["jpg", "jpeg", "png"])
         if up_file:
-            uploaded_image = Image.open(up_file)
-            st.image(uploaded_image, caption="Uploaded Notice", use_container_width=True)
+            uploaded_image_bytes = up_file.getvalue()
+            st.image(uploaded_image_bytes, caption="Uploaded Notice", use_container_width=True)
 
 with col_btn:
-    has_input = (bool(vacancy_text.strip()) if "Paste" in input_mode else uploaded_image is not None)
+    has_input = (bool(vacancy_text.strip()) if "Paste" in input_mode else uploaded_image_bytes is not None)
     
     if st.button("Generate Complete Tailored Application", type="primary", disabled=not has_input):
         if not api_key:
-            st.warning("Please configure 'GEMINI_API_KEY' in Streamlit Secrets or sidebar.")
+            st.warning("Please configure 'GROQ_API_KEY' in Streamlit Secrets or sidebar.")
         else:
-            with st.spinner("Analyzing vacancy, aligning skills & preparing full application..."):
+            with st.spinner("Processing application via Groq (high speed)..."):
                 try:
-                    genai.configure(api_key=api_key)
-                    model = genai.GenerativeModel("gemini-3.6-flash", generation_config={"response_mime_type": "application/json"})
+                    client = Groq(api_key=api_key)
 
-                    prompt = """
-                    You are an expert HR recruitment specialist for national and international NGOs in Nepal.
-                    Analyze the vacancy and tailor Sudha Panthi's application documents.
+                    system_prompt = """
+                    You are an expert HR recruitment specialist for NGOs/INGOs in Nepal.
+                    Tailor Sudha Panthi's application documents based on the provided vacancy.
 
-                    Return a JSON object with this EXACT structure:
+                    CRITICAL CONSTRAINTS:
+                    1. Work experience bullets MUST strictly remain under their authentic organizations:
+                       - Nepal Development Research Institute (Feb-May 2025)
+                       - National Agriculture Research Centre (2023-2024)
+                       - Global Peace Foundation (June 2023-Feb 2024)
+                       - Harihar Women Savings and Loan Cooperatives Limited (April-May 2024)
+                    2. Do NOT invent duties or swap them between organizations.
+                    3. Output MUST be valid JSON only.
+
+                    JSON Structure:
                     {
                         "vacancy_details": {
                             "job_title": "string",
                             "organization": "string"
                         },
-                        "tailored_career_objective": "3-5 line customized career objective specifically tailored to the keywords and themes of this vacancy (e.g., M&E, climate resilience, field surveys, community mobilization, food security).",
+                        "tailored_career_objective": "3-5 lines aligned to vacancy keywords",
                         "tailored_skills": {
                             "computer": "Microsoft Office, Adobe Photoshop, Adobe Illustrator, Arc-GIS, RStudio, GenStat, SPSS, Kobo Toolbox",
                             "languages": "Nepali (Native), English (Fluent)",
-                            "targeted_technical_and_soft_skills": "Comma-separated list of 5-8 relevant technical and soft skills prioritized for this specific vacancy (e.g. Household Surveys, FGD/KII Facilitation, IPM, GESI, Report Writing, Community Mobilization)."
+                            "targeted_technical_and_soft_skills": "5-8 prioritized competencies"
                         },
                         "tailored_experience": [
                             {
@@ -241,45 +252,65 @@ with col_btn:
                                 "location": "Sanepa, Lalitpur",
                                 "role": "Field Researcher, MATSYA Project (Modernising Aquaculture in Nepal)",
                                 "dates": "February-May,2025",
-                                "bullets": ["List of relevant bullets for this role matching vacancy keywords"]
+                                "bullets": ["string"]
                             },
                             {
                                 "organization": "National Agriculture Research Centre, Government of Nepal (Agronomy Division)",
                                 "location": "Khumaltar, Lalitpur",
                                 "role": "Research Assistant",
                                 "dates": "2023-2024",
-                                "bullets": ["List of relevant bullets for this role"]
+                                "bullets": ["string"]
                             },
                             {
                                 "organization": "Global Peace Foundation",
                                 "location": "Nepal",
                                 "role": "Fellowship, Global Peacebuilders Leadership Program",
                                 "dates": "June 2023-February 2024",
-                                "bullets": ["List of relevant bullets for this role"]
+                                "bullets": ["string"]
                             },
                             {
                                 "organization": "Harihar Women Savings and Loan Cooperatives Limited",
                                 "location": "Pokhara, Nepal",
                                 "role": "Trainer",
                                 "dates": "April 29-May 5,2024",
-                                "bullets": ["List of relevant bullets for this role"]
+                                "bullets": ["string"]
                             }
                         ],
-                        "cover_letter": "A complete, professional 1-page cover letter addressed to the hiring committee, citing the job title and organization, connecting her authentic work at NDRI, NARC, and Global Peace Foundation directly to the required duties."
+                        "cover_letter": "Complete professional 1-page cover letter formally addressed"
                     }
-
-                    CRITICAL CONSTRAINTS:
-                    - Work experience bullets MUST strictly remain under the correct organizations. Do NOT invent duties or swap them between organizations.
                     """
 
-                    full_content = [prompt, f"\n\nVACANCY TEXT:\n{vacancy_text}"] if "Paste" in input_mode else [prompt, uploaded_image]
-                    response = model.generate_content(full_content)
-                    
-                    raw_json = response.text.strip()
-                    if raw_json.startswith("```json"): raw_json = raw_json[7:]
-                    if raw_json.startswith("```"): raw_json = raw_json[3:]
-                    if raw_json.endswith("```"): raw_json = raw_json[:-3]
-                    data = json.loads(raw_json.strip())
+                    # If text: use Llama 3.3 70B (Fast & High Intelligence)
+                    # If image: use Llama 3.2 11B Vision
+                    if "Paste" in input_mode:
+                        model_name = "llama-3.3-70b-versatile"
+                        messages = [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": f"VACANCY TEXT:\n{vacancy_text}"}
+                        ]
+                    else:
+                        model_name = "llama-3.2-11b-vision-preview"
+                        base64_image = base64.b64encode(uploaded_image_bytes).decode("utf-8")
+                        messages = [
+                            {"role": "system", "content": system_prompt},
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": "Analyze this vacancy image and return JSON:"},
+                                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                                ]
+                            }
+                        ]
+
+                    response = client.chat.completions.create(
+                        model=model_name,
+                        messages=messages,
+                        response_format={"type": "json_object"},
+                        temperature=0.2
+                    )
+
+                    raw_json = response.choices[0].message.content.strip()
+                    data = json.loads(raw_json)
 
                     # -------------------------------------------------------------
                     # BUILD FULL CV PDF (All Sections Included)
@@ -355,7 +386,7 @@ with col_btn:
                     for vol_title, vol_org in PERMANENT_CV_SECTIONS["volunteering"]:
                         cv_pdf.draw_two_col_entry(clean_text(vol_title), "", clean_text(vol_org), "")
 
-                    # 9. Skills (Dynamically Adjusted)
+                    # 9. Skills
                     cv_pdf.draw_section_heading("Skills")
                     cv_pdf.set_font("Helvetica", "B", 8.8)
                     cv_pdf.cell(28, 4.2, "Computer:", ln=False)
@@ -404,9 +435,9 @@ with col_btn:
                     cl_pdf_data = cl_buf.getvalue()
 
                     # -------------------------------------------------------------
-                    # UI Review & Showcase Part of Work Done
+                    # UI Review & Showcase
                     # -------------------------------------------------------------
-                    st.success(f"Tailored for: {data['vacancy_details']['job_title']} at {data['vacancy_details']['organization']}")
+                    st.success(f"Tailored via Groq ({model_name}) for: {data['vacancy_details']['job_title']} at {data['vacancy_details']['organization']}")
 
                     tab_review, tab_cl, tab_cv_preview = st.tabs([
                         "🔍 Review Work Done (Tailored Sections)", 
