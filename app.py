@@ -6,87 +6,92 @@ import json
 import io
 
 # -------------------------------------------------------------------------
-# 1. Custom PDF Class (Replicating Sudha's Original CV Layout)
+# 1. Styled PDF Builder (Replicating Sudha's Original 3-Page CV Exactly)
 # -------------------------------------------------------------------------
-class StyledCVPDF(FPDF):
+class CompleteCVPDF(FPDF):
     def __init__(self, doc_type="CV"):
         super().__init__(format="A4", unit="mm")
         self.doc_type = doc_type
-        self.set_margins(18, 16, 18)
+        self.set_margins(16, 14, 16)
+        self.set_auto_page_break(auto=True, margin=15)
 
     def draw_cv_header(self):
-        """Header matching page 1 of Sudha's CV"""
+        """Header matching Page 1 of Sudha's CV"""
         self.set_font("Helvetica", "B", 18)
         self.set_text_color(20, 20, 20)
-        
-        # Name on Left
         self.cell(100, 8, "SUDHA PANTHI", ln=False)
         
-        # Contact Details on Right
         self.set_font("Helvetica", "", 9)
         self.set_text_color(60, 60, 60)
-        contact_x = 120
-        self.set_x(contact_x)
+        self.set_x(120)
         self.cell(0, 4, "+977-9860906707", ln=True, align="R")
-        self.set_x(contact_x)
+        self.set_x(120)
         self.cell(0, 4, "Sudha.panthee@gmail.com", ln=True, align="R")
-        self.set_x(contact_x)
+        self.set_x(120)
         self.cell(0, 4, "linkedin.com/in/sudha-panthi-10aa801b0", ln=True, align="R")
-        self.ln(5)
+        self.ln(4)
 
     def draw_section_heading(self, title):
-        """Section title with horizontal divider line"""
-        self.ln(2)
-        self.set_font("Helvetica", "B", 12)
+        """Heading with horizontal divider line"""
+        self.ln(2.5)
+        self.set_font("Helvetica", "B", 11.5)
         self.set_text_color(15, 15, 15)
-        self.cell(0, 6, title, ln=True)
+        self.cell(0, 5, title, ln=True)
         
-        # Divider line spanning full width
         curr_y = self.get_y()
         self.set_draw_color(40, 40, 40)
         self.set_line_width(0.35)
         self.line(self.l_margin, curr_y, self.w - self.r_margin, curr_y)
-        self.ln(3)
+        self.ln(2.5)
 
     def draw_org_block(self, org_name, location, role_title, dates, bullets):
-        """Job Block (Org & Location on Top, Role & Dates Below)"""
-        # Line 1: Organization (Bold Left) | Location (Right)
+        """Organization Block (Org/Location + Role/Dates + Hyphen Bullets)"""
         self.set_font("Helvetica", "B", 10)
         self.set_text_color(20, 20, 20)
-        self.cell(115, 5, org_name, ln=False)
-        self.set_font("Helvetica", "", 9.5)
-        self.cell(0, 5, location, ln=True, align="R")
-
-        # Line 2: Role / Project (Italic Left) | Dates (Right)
-        self.set_font("Helvetica", "I", 9.5)
-        self.cell(115, 5, role_title, ln=False)
-        self.set_font("Helvetica", "", 9.5)
-        self.cell(0, 5, dates, ln=True, align="R")
-        self.ln(1)
-
-        # Line 3: Bullet points with standard hyphen indentation
+        self.cell(115, 4.5, org_name, ln=False)
         self.set_font("Helvetica", "", 9)
+        self.cell(0, 4.5, location, ln=True, align="R")
+
+        self.set_font("Helvetica", "I", 9)
+        self.cell(115, 4.5, role_title, ln=False)
+        self.set_font("Helvetica", "", 9)
+        self.cell(0, 4.5, dates, ln=True, align="R")
+        self.ln(0.8)
+
+        self.set_font("Helvetica", "", 8.8)
         self.set_text_color(35, 35, 35)
         for bullet in bullets:
             self.set_x(self.l_margin)
-            self.cell(4, 4.5, "-", ln=False)
-            self.multi_cell(0, 4.5, f" {bullet}")
-        self.ln(2.5)
+            self.cell(4, 4.2, "-", ln=False)
+            self.multi_cell(0, 4.2, f" {bullet}")
+        self.ln(1.8)
+
+    def draw_two_col_entry(self, left_bold, left_sub, right_txt, right_sub=""):
+        """Two-column layout for Education, Leadership, Workshops, etc."""
+        self.set_font("Helvetica", "B", 9.5)
+        self.set_text_color(20, 20, 20)
+        self.cell(120, 4.2, left_bold, ln=False)
+        self.set_font("Helvetica", "", 9)
+        self.cell(0, 4.2, right_txt, ln=True, align="R")
+
+        if left_sub or right_sub:
+            self.set_font("Helvetica", "", 8.8)
+            self.set_text_color(50, 50, 50)
+            self.cell(120, 4.2, left_sub, ln=False)
+            self.cell(0, 4.2, right_sub, ln=True, align="R")
+        self.ln(1)
 
     def footer(self):
-        """Footer: 'Sudha Panthi - Email: Sudha.panthee@gmail.com    X | P a g e'"""
+        """Page Footer: Sudha Panthi - Email: ... | X | P a g e"""
         self.set_y(-12)
         self.set_font("Helvetica", "", 8.5)
         self.set_text_color(90, 90, 90)
-        
-        # Left footer
         self.cell(100, 8, "Sudha Panthi - Email: Sudha.panthee@gmail.com", ln=False, align="L")
-        # Right footer
         self.cell(0, 8, f"{self.page_no()} | P a g e", ln=False, align="R")
 
 
 def clean_text(txt):
-    """Sanitizes text to avoid encoding issues in standard PDF rendering"""
+    """Sanitizes unicode to Latin-1 compatible characters for standard PDF fonts"""
     if not txt:
         return ""
     replacements = {
@@ -99,83 +104,86 @@ def clean_text(txt):
 
 
 # -------------------------------------------------------------------------
-# 2. Sudha Panthi's Verified Profile Data
+# 2. Permanent CV Database (Included in every generated CV)
 # -------------------------------------------------------------------------
-CANDIDATE_PROFILE = """
-CANDIDATE: SUDHA PANTHI
-Contact: Sudha.panthee@gmail.com | 977-9860906707 | Lalitpur/Kathmandu, Nepal
-LinkedIn: linkedin.com/in/sudha-panthi-10aa801b0
-
-VERIFIED WORK EXPERIENCE (DO NOT ALTER OR SHIFT BETWEEN ORGANIZATIONS):
-1. Organization: Nepal Development Research Institute
-   Location: Sanepa, Lalitpur
-   Role: Field Researcher, MATSYA Project (Modernising Aquaculture in Nepal)
-   Dates: February-May,2025
-   Authentic Duties:
-   - Performed Key Informant Interviews (KII) with fish farmers, traders, officers, breeders and other stakeholders related to fishery.
-   - Facilitated Focus Group Discussions (FGDs) to assess challenges and opportunities in the fisheries sector.
-   - Conducted door-to-door visits to collect data on fisheries and aquaculture practices using structured close and open-ended questionnaires.
-   - Transcribed the interviews to prepare a report.
-   - Collected and managed survey data using Kobo Toolbox.
-
-2. Organization: National Agriculture Research Centre, Government of Nepal (Agronomy Division)
-   Location: Khumaltar, Lalitpur
-   Role: Research Assistant
-   Dates: 2023-2024
-   Authentic Duties:
-   - Provided guidance to Junior Technical Assistants (JTA) on field activities.
-   - Conducted regular meetings with the supervisor to report on wheat research progress.
-   - Designed and executed experiment on pipeline variety of wheat.
-   - Collected data from the field, laboratory and literature.
-   - Recorded, analysed, and interpreted agronomic data.
-   - Prepared research reports based on field observations and data analysis.
-
-3. Organization: Global Peace Foundation
-   Location: Nepal
-   Role: Fellowship, Global Peacebuilders Leadership Program
-   Dates: June 2023-February 2024
-   Authentic Duties:
-   - Identified community needs through priority matrix, preference ranking, and log frame to design targeted training programs.
-   - Organized and implemented a moral and innovative leadership training program in a school in Lamjung, benefiting 70 participants.
-   - Facilitated Capacity Building of Peacebuilders on 'Achieving Food Security by Reducing Food Waste.'
-   - Conducted training on menstrual hygiene and sustainable environment practices at SOS Hermann Gmeiner School, benefiting 75 students.
-   - Implemented the project 'Building a Path for Organic Community' by providing training on efficient water management systems, insect pest control using the Integrated Pest Management (IPM) approach, nursery bed preparation, and preparation of jhol mol (liquid fertilizer) in a remote village of Tanahu, benefiting 36 local people.
-
-4. Organization: Harihar Women Savings and Loan Cooperatives Limited
-   Location: Pokhara, Nepal
-   Role: Trainer
-   Dates: April 29-May 5,2024
-   Authentic Duties:
-   - Delivered 7 days training on off season vegetable cultivation, and pest and insect management
-   - Specific crop-based practical demonstration on management practices
-
-EDUCATION:
-- M.Sc. in Agriculture (2025-Present), IAAS, Tribhuvan University
-- B.Sc. in Agriculture (2020-2024), IAAS, Tribhuvan University (Percentage: 75.38%, IDF Scholarship)
-
-SKILLS:
-- Tools: Kobo Toolbox, Arc-GIS, RStudio, GenStat, SPSS, Microsoft Office
-- Competencies: Field surveys, FGD/KII facilitation, IPM, GESI, Community Training, Agronomic trials
-"""
+PERMANENT_CV_SECTIONS = {
+    "publication": "Impact of Farmers' Marketing Decisions on Profitability in Wheat: A Case Study of Kailali District - American Journal of Applied Statistics and Economics. DOI:10.54536/ajase.v5i2.6848",
+    "projects": [
+        "Impact of Sowing Date and Seed Rate in Wheat Yield Performance",
+        "Case Study on Agribusiness management and financing of a firm",
+        "Mushroom Cultivation and disease identification",
+        "Case Study on Agroforestry Model of a Community",
+        "Design on Annual Vegetable Production Crop Calendar and Budget Estimation",
+        "Effect of Using Single Strain and Multiple Strain Probiotics in COBB 500 Broilers"
+    ],
+    "education": [
+        {"inst": "Tribhuvan University, Institute of Agriculture and Animal Science", "deg": "Masters of Science in Agriculture", "loc": "Kathmandu, Nepal", "yr": "2025-Present"},
+        {"inst": "Tribhuvan University, Institute of Agriculture and Animal Science", "deg": "Bachelors of Science in Agriculture * Percentage: 75.38% (IDF Scholarship)", "loc": "Lamjung, Nepal", "yr": "2020-2024"},
+        {"inst": "St. Xavier's College", "deg": "High School * GPA: 3.22", "loc": "Maitighar, Kathmandu", "yr": "2016-2018"},
+        {"inst": "SOS Hermann Gmeiner School", "deg": "Higher Secondary * GPA: 3.8", "loc": "Sanothimi, Bhaktapur", "yr": "2016"}
+    ],
+    "leadership": [
+        {
+            "org": "Technical Students' Association of Nepal, Lamjung Campus",
+            "loc": "Lamjung, Nepal",
+            "roles": [
+                ("President (2023-2024)", "Organised technical boot-camps on MS & Adobe packages, public speaking, teamwork, Chief Trainer."),
+                ("Secretary (2022-2023)", "Conducted association programs and meetings; coordinated with partner organizations."),
+                ("Deputy-Secretary (2021-2022)", "Handled minute record writing, documentation, and social media communication.")
+            ]
+        },
+        {
+            "org": "SOS'ian Social Service Club",
+            "loc": "Bhaktapur, Nepal",
+            "roles": [
+                ("Secretary (2015-2016)", "Conducted meetings, plogging, awareness on social issues, earthquake relief fund & rural library setup.")
+            ]
+        }
+    ],
+    "trainings": [
+        ("Climate Change Course, 2024", "Power Shift Nepal"),
+        ("Exhibitor at Future Smart Crop Exhibition, 2024", "Food and Agriculture Organization"),
+        ("Exhibitor at 5th Nepal Agritech International Expo, 2023", "Media Space Solutions Pvt. Ltd"),
+        ("Model Youth Parliament, 2023", "Tony Hagen Foundation Nepal"),
+        ("Training of Trainers, 2023", "Youth for Community Transformation"),
+        ("Arc GIS Training, 2023", "CARITAS Nepal"),
+        ("Farmers Field School", "Technical Students' Association of Nepal"),
+        ("Data and Analytics Session on R Studio, 2022", "Technical Students' Association of Nepal"),
+        ("Technical Bootcamp, 2021", "Technical Students' Association of Nepal"),
+        ("Five days Women's Self Defence Training, 2021", "Youth for Community Transformation"),
+        ("Leadership and Organizing, 2021", "Leadership and Organizing"),
+        ("Capacity Building of Peacebuilders, 2020", "Global Peace Foundation"),
+        ("Moral & Innovative Leadership, 2020", "Global Peace Foundation")
+    ],
+    "volunteering": [
+        ("Flood Relief Campaign, 2024", "Global Peace Foundation"),
+        ("Learn and Earn by Doing, 2024", "Awareness 360"),
+        ("World Social Forum, 2024", "World Social Forum"),
+        ("10th Undergraduate Practicum Assessment Symposium, 2023", "RD-TEC, Lamjung Campus"),
+        ("Blood Donation, 2023", "Nepal RedCross Society")
+    ],
+    "referees": [
+        {"name": "Dr. Mahesh Jaisi", "title": "Assistant Professor, IAAS", "phone": "+977 - 9851242082", "email": "mahesh.jaishi@gmail.com"},
+        {"name": "Bhimsen Chaulagain", "title": "Senior Scientist S2, NARC", "phone": "+977 - 9860679982", "email": "bhimsen.chaulagain@gmail.com"},
+        {"name": "Bambie Gordon Panta", "title": "Director, Global Peace Foundation Nepal", "phone": "+977 - 9849043897", "email": "bpanta@globalpeace.org"}
+    ]
+}
 
 # -------------------------------------------------------------------------
-# 3. Streamlit App Interface & Logic
+# 3. Streamlit Interface
 # -------------------------------------------------------------------------
-st.set_page_config(page_title="Sudha Panthi - Vacancy Matcher", layout="wide")
+st.set_page_config(page_title="Sudha Panthi - Vacancy Application Matcher", layout="wide")
 
-st.title("🌱 NGO/INGO Vacancy Application Matcher")
-st.write("Provide a job vacancy via text or image to generate a tailored Career Objective, Work Experience, and Cover Letter.")
+st.title("🌱 NGO/INGO Application Generator")
+st.write("Generates your complete CV and tailored Cover Letter matching standard development sector matrices.")
 
-# Retrieve & Sanitize API Key from Streamlit Secrets or Sidebar
 raw_key = st.secrets.get("GEMINI_API_KEY", None)
-
 if not raw_key:
     raw_key = st.sidebar.text_input("Gemini API Key:", type="password")
     st.sidebar.caption("Provide an API key from Google AI Studio")
 
 api_key = raw_key.strip().strip('"').strip("'") if raw_key else None
 
-# Input selection: Text vs. Image
 input_mode = st.radio(
     "Select Vacancy Input Format:",
     ["📝 Paste Job Description / Text", "🖼️ Upload Vacancy Image / Screenshot"],
@@ -185,124 +193,109 @@ input_mode = st.radio(
 vacancy_text = ""
 uploaded_image = None
 
-col_input, col_action = st.columns([1.2, 1.8])
-
-with col_input:
+col_in, col_btn = st.columns([1.2, 1.8])
+with col_in:
     if "Paste" in input_mode:
         vacancy_text = st.text_area(
             "Paste Job Vacancy / TOR text here:",
-            placeholder="Paste Job Title, Organization, Duties, Qualifications, and Responsibilities here...",
-            height=320
+            placeholder="Paste Job Title, Organization, Duties, and Requirements here...",
+            height=300
         )
     else:
-        uploaded_file = st.file_uploader("Upload Vacancy Notice (JPG, PNG)", type=["jpg", "jpeg", "png"])
-        if uploaded_file:
-            uploaded_image = Image.open(uploaded_file)
+        up_file = st.file_uploader("Upload Vacancy Notice (JPG, PNG)", type=["jpg", "jpeg", "png"])
+        if up_file:
+            uploaded_image = Image.open(up_file)
             st.image(uploaded_image, caption="Uploaded Notice", use_container_width=True)
 
-with col_action:
-    ready_to_generate = (bool(vacancy_text.strip()) if "Paste" in input_mode else uploaded_image is not None)
+with col_btn:
+    has_input = (bool(vacancy_text.strip()) if "Paste" in input_mode else uploaded_image is not None)
     
-    if st.button("Generate Tailored Application", type="primary", disabled=not ready_to_generate):
+    if st.button("Generate Complete Tailored Application", type="primary", disabled=not has_input):
         if not api_key:
-            st.warning("Please configure 'GEMINI_API_KEY' in Streamlit Secrets or enter your key in the sidebar.")
+            st.warning("Please configure 'GEMINI_API_KEY' in Streamlit Secrets or sidebar.")
         else:
-            with st.spinner("Connecting to Google AI (gemini-3.6-flash) and matching your profile..."):
+            with st.spinner("Analyzing vacancy, aligning skills & preparing full application..."):
                 try:
                     genai.configure(api_key=api_key)
-                    
-                    # Explicitly use gemini-3.6-flash as instructed by Google
-                    selected_model = "gemini-3.6-flash"
-                    
-                    model = genai.GenerativeModel(
-                        selected_model, 
-                        generation_config={"response_mime_type": "application/json"}
-                    )
+                    model = genai.GenerativeModel("gemini-3.6-flash", generation_config={"response_mime_type": "application/json"})
 
-                    prompt = f"""
-                    You are an expert HR recruitment specialist for national and international NGOs in Nepal (e.g., USAID, UN, FCDO partners, CARE, Save the Children).
-                    Analyze the vacancy details provided and tailor Sudha Panthi's application documents.
-                    
-                    Return a valid JSON object matching this EXACT structure:
-                    {{
-                        "vacancy_details": {{
+                    prompt = """
+                    You are an expert HR recruitment specialist for national and international NGOs in Nepal.
+                    Analyze the vacancy and tailor Sudha Panthi's application documents.
+
+                    Return a JSON object with this EXACT structure:
+                    {
+                        "vacancy_details": {
                             "job_title": "string",
                             "organization": "string"
-                        }},
-                        "tailored_career_objective": "A 3-5 line customized career objective specifically tailored to the keywords, duties, and thematic areas of this vacancy (e.g. food security, survey research, climate resilience, community mobilization), written in the original CV's voice.",
+                        },
+                        "tailored_career_objective": "3-5 line customized career objective specifically tailored to the keywords and themes of this vacancy (e.g., M&E, climate resilience, field surveys, community mobilization, food security).",
+                        "tailored_skills": {
+                            "computer": "Microsoft Office, Adobe Photoshop, Adobe Illustrator, Arc-GIS, RStudio, GenStat, SPSS, Kobo Toolbox",
+                            "languages": "Nepali (Native), English (Fluent)",
+                            "targeted_technical_and_soft_skills": "Comma-separated list of 5-8 relevant technical and soft skills prioritized for this specific vacancy (e.g. Household Surveys, FGD/KII Facilitation, IPM, GESI, Report Writing, Community Mobilization)."
+                        },
                         "tailored_experience": [
-                            {{
+                            {
                                 "organization": "Nepal Development Research Institute",
                                 "location": "Sanepa, Lalitpur",
                                 "role": "Field Researcher, MATSYA Project (Modernising Aquaculture in Nepal)",
                                 "dates": "February-May,2025",
-                                "bullets": ["List of relevant bullets for this role matching the vacancy"]
-                            }},
-                            {{
+                                "bullets": ["List of relevant bullets for this role matching vacancy keywords"]
+                            },
+                            {
                                 "organization": "National Agriculture Research Centre, Government of Nepal (Agronomy Division)",
                                 "location": "Khumaltar, Lalitpur",
                                 "role": "Research Assistant",
                                 "dates": "2023-2024",
                                 "bullets": ["List of relevant bullets for this role"]
-                            }},
-                            {{
+                            },
+                            {
                                 "organization": "Global Peace Foundation",
                                 "location": "Nepal",
                                 "role": "Fellowship, Global Peacebuilders Leadership Program",
                                 "dates": "June 2023-February 2024",
                                 "bullets": ["List of relevant bullets for this role"]
-                            }},
-                            {{
+                            },
+                            {
                                 "organization": "Harihar Women Savings and Loan Cooperatives Limited",
                                 "location": "Pokhara, Nepal",
                                 "role": "Trainer",
                                 "dates": "April 29-May 5,2024",
                                 "bullets": ["List of relevant bullets for this role"]
-                            }}
+                            }
                         ],
-                        "cover_letter": "A complete, professional 1-page cover letter addressed to the hiring team, citing the job title and organization, connecting her authentic work at NDRI, NARC, and Global Peace Foundation directly to the required responsibilities."
-                    }}
+                        "cover_letter": "A complete, professional 1-page cover letter addressed to the hiring committee, citing the job title and organization, connecting her authentic work at NDRI, NARC, and Global Peace Foundation directly to the required duties."
+                    }
 
                     CRITICAL CONSTRAINTS:
-                    1. The experience bullets MUST strictly remain with the organization where they were completed. Do NOT attribute tasks to an organization she did not work for.
-                    2. Keep language professional, measurable, and tailored to development sector standards in Nepal.
-
-                    CANDIDATE PROFILE:
-                    {CANDIDATE_PROFILE}
+                    - Work experience bullets MUST strictly remain under the correct organizations. Do NOT invent duties or swap them between organizations.
                     """
 
-                    if "Paste" in input_mode:
-                        full_content = [prompt, f"\n\nVACANCY TEXT PROVIDED:\n{vacancy_text}"]
-                    else:
-                        full_content = [prompt, uploaded_image]
-
+                    full_content = [prompt, f"\n\nVACANCY TEXT:\n{vacancy_text}"] if "Paste" in input_mode else [prompt, uploaded_image]
                     response = model.generate_content(full_content)
                     
                     raw_json = response.text.strip()
-                    if raw_json.startswith("```json"):
-                        raw_json = raw_json[7:]
-                    if raw_json.startswith("```"):
-                        raw_json = raw_json[3:]
-                    if raw_json.endswith("```"):
-                        raw_json = raw_json[:-3]
-                        
+                    if raw_json.startswith("```json"): raw_json = raw_json[7:]
+                    if raw_json.startswith("```"): raw_json = raw_json[3:]
+                    if raw_json.endswith("```"): raw_json = raw_json[:-3]
                     data = json.loads(raw_json.strip())
 
-                    # -------------------------------------------------
-                    # 1. Build PDF: Tailored CV Section
-                    # -------------------------------------------------
-                    cv_pdf = StyledCVPDF(doc_type="CV")
+                    # -------------------------------------------------------------
+                    # BUILD FULL CV PDF (All Sections Included)
+                    # -------------------------------------------------------------
+                    cv_pdf = CompleteCVPDF(doc_type="CV")
                     cv_pdf.add_page()
                     cv_pdf.draw_cv_header()
                     
-                    # Career Objective
+                    # 1. Career Objective
                     cv_pdf.draw_section_heading("Career Objective")
-                    cv_pdf.set_font("Helvetica", "", 9.5)
+                    cv_pdf.set_font("Helvetica", "", 9)
                     cv_pdf.set_text_color(30, 30, 30)
-                    cv_pdf.multi_cell(0, 4.5, clean_text(data["tailored_career_objective"]))
-                    cv_pdf.ln(2)
+                    cv_pdf.multi_cell(0, 4.3, clean_text(data["tailored_career_objective"]))
+                    cv_pdf.ln(1)
 
-                    # Experience
+                    # 2. Experience
                     cv_pdf.draw_section_heading("Experience")
                     for org in data["tailored_experience"]:
                         if org.get("bullets"):
@@ -313,61 +306,158 @@ with col_action:
                                 clean_text(org["dates"]),
                                 [clean_text(b) for b in org["bullets"]]
                             )
-                    
-                    cv_pdf_bytes = io.BytesIO()
-                    cv_pdf.output(cv_pdf_bytes)
-                    cv_pdf_data = cv_pdf_bytes.getvalue()
 
-                    # -------------------------------------------------
-                    # 2. Build PDF: Cover Letter
-                    # -------------------------------------------------
-                    cl_pdf = StyledCVPDF(doc_type="Cover Letter")
+                    # 3. Publication
+                    cv_pdf.draw_section_heading("Publication")
+                    cv_pdf.set_font("Helvetica", "", 8.8)
+                    cv_pdf.multi_cell(0, 4.2, clean_text(PERMANENT_CV_SECTIONS["publication"]))
+                    cv_pdf.ln(1)
+
+                    # 4. Projects
+                    cv_pdf.draw_section_heading("Projects")
+                    cv_pdf.set_font("Helvetica", "", 8.8)
+                    for proj in PERMANENT_CV_SECTIONS["projects"]:
+                        cv_pdf.cell(4, 4.2, "-", ln=False)
+                        cv_pdf.multi_cell(0, 4.2, f" {clean_text(proj)}")
+                    cv_pdf.ln(1)
+
+                    # 5. Education
+                    cv_pdf.draw_section_heading("Education")
+                    for edu in PERMANENT_CV_SECTIONS["education"]:
+                        cv_pdf.draw_two_col_entry(
+                            clean_text(edu["inst"]),
+                            clean_text(edu["deg"]),
+                            clean_text(edu["loc"]),
+                            clean_text(edu["yr"])
+                        )
+
+                    # 6. Leadership Activities
+                    cv_pdf.draw_section_heading("Leadership Activities")
+                    for lead in PERMANENT_CV_SECTIONS["leadership"]:
+                        cv_pdf.set_font("Helvetica", "B", 9.5)
+                        cv_pdf.cell(120, 4.5, clean_text(lead["org"]), ln=False)
+                        cv_pdf.set_font("Helvetica", "", 9)
+                        cv_pdf.cell(0, 4.5, clean_text(lead["loc"]), ln=True, align="R")
+                        for r_title, r_desc in lead["roles"]:
+                            cv_pdf.set_font("Helvetica", "I", 8.8)
+                            cv_pdf.cell(0, 4, clean_text(r_title), ln=True)
+                            cv_pdf.set_font("Helvetica", "", 8.6)
+                            cv_pdf.multi_cell(0, 4, f"  {clean_text(r_desc)}")
+                        cv_pdf.ln(1)
+
+                    # 7. Trainings and Workshops
+                    cv_pdf.draw_section_heading("Trainings and Workshops")
+                    for tr_title, tr_org in PERMANENT_CV_SECTIONS["trainings"]:
+                        cv_pdf.draw_two_col_entry(clean_text(tr_title), "", clean_text(tr_org), "")
+
+                    # 8. Volunteering
+                    cv_pdf.draw_section_heading("Volunteering")
+                    for vol_title, vol_org in PERMANENT_CV_SECTIONS["volunteering"]:
+                        cv_pdf.draw_two_col_entry(clean_text(vol_title), "", clean_text(vol_org), "")
+
+                    # 9. Skills (Dynamically Adjusted)
+                    cv_pdf.draw_section_heading("Skills")
+                    cv_pdf.set_font("Helvetica", "B", 8.8)
+                    cv_pdf.cell(28, 4.2, "Computer:", ln=False)
+                    cv_pdf.set_font("Helvetica", "", 8.8)
+                    cv_pdf.multi_cell(0, 4.2, clean_text(data["tailored_skills"]["computer"]))
+
+                    cv_pdf.set_font("Helvetica", "B", 8.8)
+                    cv_pdf.cell(28, 4.2, "Language:", ln=False)
+                    cv_pdf.set_font("Helvetica", "", 8.8)
+                    cv_pdf.multi_cell(0, 4.2, clean_text(data["tailored_skills"]["languages"]))
+
+                    cv_pdf.set_font("Helvetica", "B", 8.8)
+                    cv_pdf.cell(28, 4.2, "Vacancy Skills:", ln=False)
+                    cv_pdf.set_font("Helvetica", "", 8.8)
+                    cv_pdf.multi_cell(0, 4.2, clean_text(data["tailored_skills"]["targeted_technical_and_soft_skills"]))
+                    cv_pdf.ln(1)
+
+                    # 10. Referees
+                    cv_pdf.draw_section_heading("Referees")
+                    for ref in PERMANENT_CV_SECTIONS["referees"]:
+                        cv_pdf.set_font("Helvetica", "B", 9)
+                        cv_pdf.cell(70, 4, clean_text(ref["name"]), ln=False)
+                        cv_pdf.set_font("Helvetica", "", 8.8)
+                        cv_pdf.cell(0, 4, f"{clean_text(ref['phone'])} | {clean_text(ref['email'])}", ln=True)
+                        cv_pdf.set_font("Helvetica", "I", 8.5)
+                        cv_pdf.cell(0, 3.8, clean_text(ref["title"]), ln=True)
+                        cv_pdf.ln(1.5)
+
+                    cv_buf = io.BytesIO()
+                    cv_pdf.output(cv_buf)
+                    cv_pdf_data = cv_buf.getvalue()
+
+                    # -------------------------------------------------------------
+                    # BUILD COVER LETTER PDF
+                    # -------------------------------------------------------------
+                    cl_pdf = CompleteCVPDF(doc_type="Cover Letter")
                     cl_pdf.add_page()
                     cl_pdf.draw_cv_header()
                     cl_pdf.draw_section_heading(f"Application for {clean_text(data['vacancy_details']['job_title'])}")
-                    
                     cl_pdf.set_font("Helvetica", "", 9.5)
                     cl_pdf.set_text_color(30, 30, 30)
                     cl_pdf.multi_cell(0, 4.8, clean_text(data["cover_letter"]))
                     
-                    cl_pdf_bytes = io.BytesIO()
-                    cl_pdf.output(cl_pdf_bytes)
-                    cl_pdf_data = cl_pdf_bytes.getvalue()
+                    cl_buf = io.BytesIO()
+                    cl_pdf.output(cl_buf)
+                    cl_pdf_data = cl_buf.getvalue()
 
-                    # -------------------------------------------------
-                    # Display Results & Download Options
-                    # -------------------------------------------------
-                    st.success(f"Generated successfully using [{selected_model}] for: {data['vacancy_details']['job_title']} at {data['vacancy_details']['organization']}")
+                    # -------------------------------------------------------------
+                    # UI Review & Showcase Part of Work Done
+                    # -------------------------------------------------------------
+                    st.success(f"Tailored for: {data['vacancy_details']['job_title']} at {data['vacancy_details']['organization']}")
 
-                    tab_cv, tab_cl = st.tabs(["📄 Tailored CV Section", "✉️ Tailored Cover Letter"])
+                    tab_review, tab_cl, tab_cv_preview = st.tabs([
+                        "🔍 Review Work Done (Tailored Sections)", 
+                        "✉️ Cover Letter", 
+                        "📄 Full CV Details"
+                    ])
 
-                    with tab_cv:
-                        st.subheader("Customized Career Objective")
+                    with tab_review:
+                        st.markdown("### 1. Adapted Career Objective")
                         st.info(data["tailored_career_objective"])
-                        
-                        st.subheader("Targeted Work Experience")
+
+                        st.markdown("### 2. Vacancy-Targeted Skills")
+                        col_s1, col_s2 = st.columns(2)
+                        with col_s1:
+                            st.write(f"**Software / Tools:** {data['tailored_skills']['computer']}")
+                            st.write(f"**Languages:** {data['tailored_skills']['languages']}")
+                        with col_s2:
+                            st.write(f"**Prioritized Competencies:** {data['tailored_skills']['targeted_technical_and_soft_skills']}")
+
+                        st.markdown("### 3. Tailored Experience Bullets (By Organization)")
                         for org in data["tailored_experience"]:
-                            with st.expander(f"{org['organization']} — {org['role']}"):
+                            with st.expander(f"📍 {org['organization']} — {org['role']}"):
                                 for b in org["bullets"]:
                                     st.write(f"• {b}")
 
                         st.download_button(
-                            label="📥 Download Tailored CV (PDF)",
+                            label="📥 Download Complete Tailored CV (PDF)",
                             data=cv_pdf_data,
-                            file_name=f"Sudha_Panthi_CV_{data['vacancy_details']['job_title'].replace(' ', '_')}.pdf",
+                            file_name=f"Sudha_Panthi_Complete_CV_{data['vacancy_details']['job_title'].replace(' ', '_')}.pdf",
                             mime="application/pdf"
                         )
 
                     with tab_cl:
                         st.subheader("Formal Cover Letter")
-                        st.text_area("Cover Letter Preview:", value=data["cover_letter"], height=320)
-                        
+                        st.text_area("Cover Letter Preview:", value=data["cover_letter"], height=300)
                         st.download_button(
                             label="📥 Download Cover Letter (PDF)",
                             data=cl_pdf_data,
                             file_name=f"Sudha_Panthi_Cover_Letter_{data['vacancy_details']['job_title'].replace(' ', '_')}.pdf",
                             mime="application/pdf"
                         )
+
+                    with tab_cv_preview:
+                        st.markdown("#### Permanent Sections Included in the Output PDF:")
+                        st.write("✔️ **Publication:** American Journal of Applied Statistics and Economics (DOI: 10.54536/ajase.v5i2.6848)")
+                        st.write("✔️ **6 Research & Field Projects**")
+                        st.write("✔️ **Full Education History** (IAAS TU M.Sc., B.Sc., St. Xavier's, SOS Hermann Gmeiner)")
+                        st.write("✔️ **Leadership Roles** (TSAN Lamjung Campus & SOS'ian Club)")
+                        st.write("✔️ **13 Trainings & Workshops** (CARITAS, FAO, Power Shift Nepal, etc.)")
+                        st.write("✔️ **5 Volunteering Records**")
+                        st.write("✔️ **3 Referees** (Dr. Mahesh Jaisi, Bhimsen Chaulagain, Bambie Gordon Panta)")
 
                 except Exception as e:
                     st.error(f"Error processing document: {e}")
