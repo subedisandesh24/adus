@@ -164,182 +164,206 @@ SKILLS:
 st.set_page_config(page_title="Sudha Panthi - Vacancy Matcher", layout="wide")
 
 st.title("🌱 NGO/INGO Vacancy Application Matcher")
-st.write("Upload a vacancy announcement image to tailor your Career Objective, Work Experience, and Cover Letter.")
+st.write("Provide a job vacancy via text or image to generate a tailored Career Objective, Work Experience, and Cover Letter.")
 
-# Retrieve API Key from Streamlit Secrets or provide Sidebar input as fallback
+# Retrieve API Key from Streamlit Secrets or sidebar
 api_key = st.secrets.get("GEMINI_API_KEY", None)
 
 if not api_key:
     api_key = st.sidebar.text_input("Gemini API Key:", type="password")
     st.sidebar.caption("Provide an API key from Google AI Studio")
 
-uploaded_file = st.file_uploader("Upload Vacancy Notice Image (JPG, PNG)", type=["jpg", "jpeg", "png"])
+# Input selection: Text vs. Image
+input_mode = st.radio(
+    "Select Vacancy Input Format:",
+    ["📝 Paste Job Description / Text", "🖼️ Upload Vacancy Image / Screenshot"],
+    horizontal=True
+)
 
-if uploaded_file:
-    if not api_key:
-        st.warning("Please configure 'GEMINI_API_KEY' in Streamlit Secrets or enter your key in the sidebar.")
+vacancy_text = ""
+uploaded_image = None
+
+col_input, col_action = st.columns([1.2, 1.8])
+
+with col_input:
+    if "Paste" in input_mode:
+        vacancy_text = st.text_area(
+            "Paste Job Vacancy / TOR text here:",
+            placeholder="Paste Job Title, Organization, Duties, Qualifications, and Responsibilities here...",
+            height=320
+        )
     else:
-        genai.configure(api_key=api_key)
-        image = Image.open(uploaded_file)
+        uploaded_file = st.file_uploader("Upload Vacancy Notice (JPG, PNG)", type=["jpg", "jpeg", "png"])
+        if uploaded_file:
+            uploaded_image = Image.open(uploaded_file)
+            st.image(uploaded_image, caption="Uploaded Notice", use_container_width=True)
 
-        col1, col2 = st.columns([1, 2])
-        with col1:
-            st.image(image, caption="Uploaded Vacancy Notice", use_container_width=True)
+with col_action:
+    ready_to_generate = (bool(vacancy_text.strip()) if "Paste" in input_mode else uploaded_image is not None)
+    
+    if st.button("Generate Tailored Application", type="primary", disabled=not ready_to_generate):
+        if not api_key:
+            st.warning("Please configure 'GEMINI_API_KEY' in Streamlit Secrets or enter your key in the sidebar.")
+        else:
+            with st.spinner("Analyzing vacancy details and matching your profile..."):
+                try:
+                    genai.configure(api_key=api_key)
+                    model = genai.GenerativeModel(
+                        "gemini-1.5-flash", 
+                        generation_config={"response_mime_type": "application/json"}
+                    )
 
-        with col2:
-            if st.button("Generate Tailored Application", type="primary"):
-                with st.spinner("Analyzing vacancy notice and matching your profile..."):
-                    try:
-                        model = genai.GenerativeModel(
-                            "gemini-1.5-flash", 
-                            generation_config={"response_mime_type": "application/json"}
+                    prompt = f"""
+                    You are an expert HR recruitment specialist for national and international NGOs in Nepal (e.g., USAID, UN, FCDO partners, CARE, Save the Children).
+                    Analyze the vacancy details provided and tailor Sudha Panthi's application documents.
+                    
+                    Return a valid JSON object matching this EXACT structure:
+                    {{
+                        "vacancy_details": {{
+                            "job_title": "string",
+                            "organization": "string"
+                        }},
+                        "tailored_career_objective": "A 3-5 line customized career objective specifically tailored to the keywords, duties, and thematic areas of this vacancy (e.g. food security, survey research, climate resilience, community mobilization), written in the original CV's voice.",
+                        "tailored_experience": [
+                            {{
+                                "organization": "Nepal Development Research Institute",
+                                "location": "Sanepa, Lalitpur",
+                                "role": "Field Researcher, MATSYA Project (Modernising Aquaculture in Nepal)",
+                                "dates": "February-May,2025",
+                                "bullets": ["List of relevant bullets for this role matching the vacancy"]
+                            }},
+                            {{
+                                "organization": "National Agriculture Research Centre, Government of Nepal (Agronomy Division)",
+                                "location": "Khumaltar, Lalitpur",
+                                "role": "Research Assistant",
+                                "dates": "2023-2024",
+                                "bullets": ["List of relevant bullets for this role"]
+                            }},
+                            {{
+                                "organization": "Global Peace Foundation",
+                                "location": "Nepal",
+                                "role": "Fellowship, Global Peacebuilders Leadership Program",
+                                "dates": "June 2023-February 2024",
+                                "bullets": ["List of relevant bullets for this role"]
+                            }},
+                            {{
+                                "organization": "Harihar Women Savings and Loan Cooperatives Limited",
+                                "location": "Pokhara, Nepal",
+                                "role": "Trainer",
+                                "dates": "April 29-May 5,2024",
+                                "bullets": ["List of relevant bullets for this role"]
+                            }}
+                        ],
+                        "cover_letter": "A complete, professional 1-page cover letter addressed to the hiring team, citing the job title and organization, connecting her authentic work at NDRI, NARC, and Global Peace Foundation directly to the required responsibilities."
+                    }}
+
+                    CRITICAL CONSTRAINTS:
+                    1. The experience bullets MUST strictly remain with the organization where they were completed. Do NOT attribute tasks to an organization she did not work for.
+                    2. Keep language professional, measurable, and tailored to development sector standards in Nepal.
+
+                    CANDIDATE PROFILE:
+                    {CANDIDATE_PROFILE}
+                    """
+
+                    # Pass text or image based on user selection
+                    if "Paste" in input_mode:
+                        full_content = [prompt, f"\n\nVACANCY TEXT PROVIDED:\n{vacancy_text}"]
+                    else:
+                        full_content = [prompt, uploaded_image]
+
+                    response = model.generate_content(full_content)
+                    
+                    # Clean JSON response
+                    raw_json = response.text.strip()
+                    if raw_json.startswith("```json"):
+                        raw_json = raw_json[7:]
+                    if raw_json.startswith("```"):
+                        raw_json = raw_json[3:]
+                    if raw_json.endswith("```"):
+                        raw_json = raw_json[:-3]
+                        
+                    data = json.loads(raw_json.strip())
+
+                    # -------------------------------------------------
+                    # 1. Build PDF: Tailored CV Section
+                    # -------------------------------------------------
+                    cv_pdf = StyledCVPDF(doc_type="CV")
+                    cv_pdf.add_page()
+                    cv_pdf.draw_cv_header()
+                    
+                    # Career Objective
+                    cv_pdf.draw_section_heading("Career Objective")
+                    cv_pdf.set_font("Helvetica", "", 9.5)
+                    cv_pdf.set_text_color(30, 30, 30)
+                    cv_pdf.multi_cell(0, 4.5, clean_text(data["tailored_career_objective"]))
+                    cv_pdf.ln(2)
+
+                    # Experience
+                    cv_pdf.draw_section_heading("Experience")
+                    for org in data["tailored_experience"]:
+                        if org.get("bullets"):
+                            cv_pdf.draw_org_block(
+                                clean_text(org["organization"]),
+                                clean_text(org["location"]),
+                                clean_text(org["role"]),
+                                clean_text(org["dates"]),
+                                [clean_text(b) for b in org["bullets"]]
+                            )
+                    
+                    cv_pdf_bytes = io.BytesIO()
+                    cv_pdf.output(cv_pdf_bytes)
+                    cv_pdf_data = cv_pdf_bytes.getvalue()
+
+                    # -------------------------------------------------
+                    # 2. Build PDF: Cover Letter
+                    # -------------------------------------------------
+                    cl_pdf = StyledCVPDF(doc_type="Cover Letter")
+                    cl_pdf.add_page()
+                    cl_pdf.draw_cv_header()
+                    cl_pdf.draw_section_heading(f"Application for {clean_text(data['vacancy_details']['job_title'])}")
+                    
+                    cl_pdf.set_font("Helvetica", "", 9.5)
+                    cl_pdf.set_text_color(30, 30, 30)
+                    cl_pdf.multi_cell(0, 4.8, clean_text(data["cover_letter"]))
+                    
+                    cl_pdf_bytes = io.BytesIO()
+                    cl_pdf.output(cl_pdf_bytes)
+                    cl_pdf_data = cl_pdf_bytes.getvalue()
+
+                    # -------------------------------------------------
+                    # Display Results & Download Options
+                    # -------------------------------------------------
+                    st.success(f"Generated for: {data['vacancy_details']['job_title']} at {data['vacancy_details']['organization']}")
+
+                    tab_cv, tab_cl = st.tabs(["📄 Tailored CV Section", "✉️ Tailored Cover Letter"])
+
+                    with tab_cv:
+                        st.subheader("Customized Career Objective")
+                        st.info(data["tailored_career_objective"])
+                        
+                        st.subheader("Targeted Work Experience")
+                        for org in data["tailored_experience"]:
+                            with st.expander(f"{org['organization']} — {org['role']}"):
+                                for b in org["bullets"]:
+                                    st.write(f"• {b}")
+
+                        st.download_button(
+                            label="📥 Download Tailored CV (PDF)",
+                            data=cv_pdf_data,
+                            file_name=f"Sudha_Panthi_CV_{data['vacancy_details']['job_title'].replace(' ', '_')}.pdf",
+                            mime="application/pdf"
                         )
 
-                        prompt = f"""
-                        You are an expert HR recruitment specialist for national and international NGOs in Nepal (e.g., USAID, UN, FCDO partners, CARE, Save the Children).
-                        Analyze this job vacancy image and tailor Sudha Panthi's application documents.
+                    with tab_cl:
+                        st.subheader("Formal Cover Letter")
+                        st.text_area("Cover Letter Preview:", value=data["cover_letter"], height=320)
                         
-                        Return a valid JSON object matching this EXACT structure:
-                        {{
-                            "vacancy_details": {{
-                                "job_title": "string",
-                                "organization": "string"
-                            }},
-                            "tailored_career_objective": "A 3-5 line customized career objective specifically tailored to the keywords, duties, and thematic areas of this vacancy (e.g. food security, survey research, climate resilience, community mobilization), written in the original CV's voice.",
-                            "tailored_experience": [
-                                {{
-                                    "organization": "Nepal Development Research Institute",
-                                    "location": "Sanepa, Lalitpur",
-                                    "role": "Field Researcher, MATSYA Project (Modernising Aquaculture in Nepal)",
-                                    "dates": "February-May,2025",
-                                    "bullets": ["List of relevant bullets for this role matching the vacancy"]
-                                }},
-                                {{
-                                    "organization": "National Agriculture Research Centre, Government of Nepal (Agronomy Division)",
-                                    "location": "Khumaltar, Lalitpur",
-                                    "role": "Research Assistant",
-                                    "dates": "2023-2024",
-                                    "bullets": ["List of relevant bullets for this role"]
-                                }},
-                                {{
-                                    "organization": "Global Peace Foundation",
-                                    "location": "Nepal",
-                                    "role": "Fellowship, Global Peacebuilders Leadership Program",
-                                    "dates": "June 2023-February 2024",
-                                    "bullets": ["List of relevant bullets for this role"]
-                                }},
-                                {{
-                                    "organization": "Harihar Women Savings and Loan Cooperatives Limited",
-                                    "location": "Pokhara, Nepal",
-                                    "role": "Trainer",
-                                    "dates": "April 29-May 5,2024",
-                                    "bullets": ["List of relevant bullets for this role"]
-                                }}
-                            ],
-                            "cover_letter": "A complete, professional 1-page cover letter addressed to the hiring team, citing the job title and organization, connecting her authentic work at NDRI, NARC, and Global Peace Foundation directly to the required responsibilities."
-                        }}
+                        st.download_button(
+                            label="📥 Download Cover Letter (PDF)",
+                            data=cl_pdf_data,
+                            file_name=f"Sudha_Panthi_Cover_Letter_{data['vacancy_details']['job_title'].replace(' ', '_')}.pdf",
+                            mime="application/pdf"
+                        )
 
-                        CRITICAL CONSTRAINTS:
-                        1. The experience bullets MUST strictly remain with the organization where they were completed. Do NOT attribute tasks to an organization she did not work for.
-                        2. Keep language professional, measurable, and tailored to development sector standards in Nepal.
-
-                        CANDIDATE PROFILE:
-                        {CANDIDATE_PROFILE}
-                        """
-
-                        response = model.generate_content([prompt, image])
-                        
-                        # Clean JSON response
-                        raw_json = response.text.strip()
-                        if raw_json.startswith("```json"):
-                            raw_json = raw_json[7:]
-                        if raw_json.startswith("```"):
-                            raw_json = raw_json[3:]
-                        if raw_json.endswith("```"):
-                            raw_json = raw_json[:-3]
-                            
-                        data = json.loads(raw_json.strip())
-
-                        # -------------------------------------------------
-                        # 1. Build PDF: Tailored CV Section
-                        # -------------------------------------------------
-                        cv_pdf = StyledCVPDF(doc_type="CV")
-                        cv_pdf.add_page()
-                        cv_pdf.draw_cv_header()
-                        
-                        # Career Objective
-                        cv_pdf.draw_section_heading("Career Objective")
-                        cv_pdf.set_font("Helvetica", "", 9.5)
-                        cv_pdf.set_text_color(30, 30, 30)
-                        cv_pdf.multi_cell(0, 4.5, clean_text(data["tailored_career_objective"]))
-                        cv_pdf.ln(2)
-
-                        # Experience
-                        cv_pdf.draw_section_heading("Experience")
-                        for org in data["tailored_experience"]:
-                            if org.get("bullets"):
-                                cv_pdf.draw_org_block(
-                                    clean_text(org["organization"]),
-                                    clean_text(org["location"]),
-                                    clean_text(org["role"]),
-                                    clean_text(org["dates"]),
-                                    [clean_text(b) for b in org["bullets"]]
-                                )
-                        
-                        cv_pdf_bytes = io.BytesIO()
-                        cv_pdf.output(cv_pdf_bytes)
-                        cv_pdf_data = cv_pdf_bytes.getvalue()
-
-                        # -------------------------------------------------
-                        # 2. Build PDF: Cover Letter
-                        # -------------------------------------------------
-                        cl_pdf = StyledCVPDF(doc_type="Cover Letter")
-                        cl_pdf.add_page()
-                        cl_pdf.draw_cv_header()
-                        cl_pdf.draw_section_heading(f"Application for {clean_text(data['vacancy_details']['job_title'])}")
-                        
-                        cl_pdf.set_font("Helvetica", "", 9.5)
-                        cl_pdf.set_text_color(30, 30, 30)
-                        cl_pdf.multi_cell(0, 4.8, clean_text(data["cover_letter"]))
-                        
-                        cl_pdf_bytes = io.BytesIO()
-                        cl_pdf.output(cl_pdf_bytes)
-                        cl_pdf_data = cl_pdf_bytes.getvalue()
-
-                        # -------------------------------------------------
-                        # Display Results & Download Options
-                        # -------------------------------------------------
-                        st.success(f"Generated for: {data['vacancy_details']['job_title']} at {data['vacancy_details']['organization']}")
-
-                        tab_cv, tab_cl = st.tabs(["📄 Tailored CV Section", "✉️ Tailored Cover Letter"])
-
-                        with tab_cv:
-                            st.subheader("Customized Career Objective")
-                            st.info(data["tailored_career_objective"])
-                            
-                            st.subheader("Targeted Work Experience")
-                            for org in data["tailored_experience"]:
-                                with st.expander(f"{org['organization']} — {org['role']}"):
-                                    for b in org["bullets"]:
-                                        st.write(f"• {b}")
-
-                            st.download_button(
-                                label="📥 Download Tailored CV (PDF)",
-                                data=cv_pdf_data,
-                                file_name=f"Sudha_Panthi_CV_{data['vacancy_details']['job_title'].replace(' ', '_')}.pdf",
-                                mime="application/pdf"
-                            )
-
-                        with tab_cl:
-                            st.subheader("Formal Cover Letter")
-                            st.text_area("Cover Letter Preview:", value=data["cover_letter"], height=320)
-                            
-                            st.download_button(
-                                label="📥 Download Cover Letter (PDF)",
-                                data=cl_pdf_data,
-                                file_name=f"Sudha_Panthi_Cover_Letter_{data['vacancy_details']['job_title'].replace(' ', '_')}.pdf",
-                                mime="application/pdf"
-                            )
-
-                    except Exception as e:
-                        st.error(f"Error processing document: {e}")
+                except Exception as e:
+                    st.error(f"Error processing document: {e}")
